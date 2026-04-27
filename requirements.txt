@@ -1,0 +1,28 @@
+# Core
+Django
+django-unfold
+djangorestframework
+djangorestframework-simplejwt
+
+# Database
+psycopg2-binary
+
+channels
+channels-redis
+celery
+redis
+
+# Utilities
+requests
+django_filter
+pillow
+stripe
+firebase-admin
+gunicorn
+uvicorn[standard]
+websockets
+django-cors-headers
+python-dotenv
+PyJWT
+cryptography
+drf-yasg
