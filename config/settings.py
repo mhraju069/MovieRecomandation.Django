@@ -138,6 +138,7 @@ MEDIA_ROOT = BASE_DIR / "media"
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
+        'rest_framework.authentication.SessionAuthentication',
         ),
     "DEFAULT_FILTER_BACKENDS": [
         "django_filters.rest_framework.DjangoFilterBackend",
@@ -169,3 +170,18 @@ CELERY_ACCEPT_CONTENT = ['application/json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = TIME_ZONE
+
+
+SWAGGER_SETTINGS = {
+    'SECURITY_DEFINITIONS': {
+        'Bearer': {
+            'type': 'apiKey',
+            'name': 'Authorization',
+            'in': 'header',
+            'description': 'Type in the *Value* input box below: **Bearer &lt;JWT&gt;**, where JWT is the token'
+        }
+    },
+    'USE_SESSION_AUTH': True,
+    'LOGIN_URL': '/api-auth/login/',
+    'LOGOUT_URL': '/api-auth/logout/',
+}
