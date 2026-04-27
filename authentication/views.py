@@ -52,57 +52,41 @@ class UserRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
         return User.objects.filter(email=self.request.user.email).first()
 
 
-class GetOtpView(APIView):
+class GetOtpView(generics.GenericAPIView):
     permission_classes = [permissions.AllowAny]
+    serializer_class = GetOtpSerializer
 
     def post(self, request):
-        email = request.data.get('email')
-        task = request.data.get('task', '')
-        if not email:
-            return Response(
-                {"status": False,"log": "Email is required."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        res = send_otp(email, task)
-
-        if res['status']:
-            return Response({"status": True, "log": res['log']}, status=status.HTTP_200_OK)
-        else:
-            return Response({"status": False,"log": res['log']}, status=status.HTTP_400_BAD_REQUEST)
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        res = serializer.validated_data
+        if res.get('status'):
+            return Response(res, status=status.HTTP_200_OK)
+        return Response(res, status=status.HTTP_400_BAD_REQUEST)
 
 
-class OtpVerifyView(APIView):
+class OtpVerifyView(generics.GenericAPIView):
+    permission_classes = [permissions.AllowAny]
+    serializer_class = VerifyOtpSerializer
+
     def post(self, request):
-        email = request.data.get('email')
-        otp_code = request.data.get('otp_code')
-
-        if not email or not otp_code:
-            return Response(
-                {"status": False,"log": "Email and OTP code are required."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        result = verify_otp(email, otp_code)
-
-        if result['status']:
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        res = serializer.validated_data
+        if res.get('status'):
             try:
-                user = User.objects.get(email=email)
+                user = User.objects.get(email=request.data.get('email'))
             except User.DoesNotExist:
                 return Response({"status": False,"log": "User not found."}, status=status.HTTP_404_NOT_FOUND)
 
-            # Generate JWT tokens
             refresh = RefreshToken.for_user(user)
             return Response({
                 "log": UserProfileSerializer(user).data,
                 "refresh": str(refresh),
                 "access": str(refresh.access_token),
             }, status=status.HTTP_200_OK)
-        else:
-            # 403 for lock, 400 for invalid/expired
-            status_code = status.HTTP_403_FORBIDDEN if "Too many attempts" in result['log'] else status.HTTP_400_BAD_REQUEST
-            return Response({"status": False, "log": result['log']}, status=status_code)
-
+        return Response(res, status=status.HTTP_400_BAD_REQUEST)
+        
 
 class ResetPassword(APIView):
     permission_classes = [permissions.IsAuthenticated]

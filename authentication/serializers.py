@@ -1,5 +1,6 @@
 from .models import User
 from rest_framework import serializers
+from .helper import verify_otp,send_otp
 
 
 class SignUpSerializer(serializers.ModelSerializer):
@@ -56,7 +57,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = User
-        exclude = ['block', 'is_active', 'is_staff', 'is_superuser', 'groups', 'user_permissions', 'date_joined']
+        exclude = ['block', 'is_active', 'is_staff', 'is_superuser', 'groups', 'user_permissions', 'created_at']
         read_only_fields = ['id', 'email', 'role']
         extra_kwargs = {
             'password': {'write_only': True, 'required': False}
@@ -82,3 +83,28 @@ class UserProfileSerializer(serializers.ModelSerializer):
 
         instance.save()
         return instance
+
+
+class GetOtpSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    task = serializers.CharField(max_length=100,required=False,allow_blank=True,allow_null=True)
+
+    def validate(self, attrs):
+        email = attrs.get('email')
+        task = attrs.get('task')
+        
+        res = send_otp(email, task)
+
+        return res
+    
+
+class VerifyOtpSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    otp = serializers.CharField(max_length=6)
+
+    def validate(self, attrs):
+        email = attrs.get('email')
+        otp_code = attrs.get('otp')
+
+        res = verify_otp(email, otp_code)
+        return res
