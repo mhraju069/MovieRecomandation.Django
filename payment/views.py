@@ -8,7 +8,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from .models import Payments
-from subscriptions.models import Plan, Subscriptions
+from subscription.models import Plan, Subscriptions
 from .serializers import PaymentSerializer
 from .helper import create_checkout_session
 
@@ -187,15 +187,15 @@ class StripeWebhookView(APIView):
                     payment.save()
                     
                     # Deactivate existing active subscriptions for this user
-                    # Subscriptions.objects.filter(user=payment.user, active=True).update(active=False)
+                    Subscriptions.objects.filter(user=payment.user, active=True).update(active=False)
                     
-                    # # Create/Activate new subscription
-                    # Subscriptions.objects.create(
-                    #     user=payment.user,
-                    #     plan=payment.plan,
-                    #     active=True
-                    # )
-                    # print(f"Subscription activated: User {payment.user.email} | Plan {payment.plan.name}")
+                    # Create/Activate new subscription
+                    Subscriptions.objects.create(
+                        user=payment.user,
+                        plan=payment.plan,
+                        active=True
+                    )
+                    print(f"Subscription activated: User {payment.user.email} | Plan {payment.plan.name}")
                     
                 except Exception as e:
                     print(f"Database update error: {str(e)}")

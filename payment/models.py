@@ -1,7 +1,7 @@
 from django.db import models
 from django.utils import timezone
 from django.conf import settings
-from subscriptions.models import Plan
+from subscription.models import Plan
 
 class Payments(models.Model):
     STATUS = (
