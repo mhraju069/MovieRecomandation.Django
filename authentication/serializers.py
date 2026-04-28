@@ -108,3 +108,25 @@ class VerifyOtpSerializer(serializers.Serializer):
 
         res = verify_otp(email, otp_code)
         return res
+
+
+class ResetPasswordSerializer(serializers.Serializer):
+    new_password = serializers.CharField(write_only=True)
+    confirm_password = serializers.CharField(write_only=True)
+
+    def validate(self, attrs):
+        email = self.context['request'].user.email
+        new_password = attrs.get('new_password')
+        confirm_password = attrs.get('confirm_password')
+
+        if new_password != confirm_password:
+            raise serializers.ValidationError({"status":False,"log":"Passwords do not match."})
+        
+        try:
+            user = User.objects.get(email=email)
+        except User.DoesNotExist:
+            raise serializers.ValidationError({"status":False,"log":"User not found"})
+
+        user.set_password(new_password)
+        user.save()
+        return {"status": True, "log": "Password reset successfully"}

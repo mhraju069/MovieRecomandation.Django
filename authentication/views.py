@@ -88,31 +88,17 @@ class OtpVerifyView(generics.GenericAPIView):
         return Response(res, status=status.HTTP_400_BAD_REQUEST)
         
 
-class ResetPassword(APIView):
+class ResetPasswordView(generics.GenericAPIView):
     permission_classes = [permissions.IsAuthenticated]
+    serializer_class = ResetPasswordSerializer
 
     def post(self, request):
-        email = request.data.get('email')
-        new_password = request.data.get('new_password')
-
-        if not email or not new_password :
-            return Response(
-                {"error": "Email and new password are required."},
-                status=400
-            )
-        
-        elif request.user.email != email :
-            return Response(
-                {"error": "You can only reset your own password."},
-                status=403)
-        
-        try:
-            user = User.objects.get(email=email)
-            user.set_password(new_password)
-            user.save()
-            return Response({"status": True, "log": "Password reset successfully"}, status=200)
-        except User.DoesNotExist:
-            return Response({"error": "User not found"}, status=404)
+        serializer = self.get_serializer(data=request.data, context={"request": request})
+        serializer.is_valid(raise_exception=True)
+        res = serializer.validated_data
+        if res.get('status'):
+            return Response(res, status=status.HTTP_200_OK)
+        return Response(res, status=status.HTTP_400_BAD_REQUEST)
 
 
 class GetProfileView(APIView):
