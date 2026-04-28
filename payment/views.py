@@ -6,28 +6,24 @@ from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework import status
+from rest_framework import status, generics
 from .models import Payments
 from subscription.models import Plan, Subscriptions
-from .serializers import PaymentSerializer
+from .serializers import *
 from .helper import create_checkout_session
-
+from rest_framework.permissions import IsAuthenticated
 # Create your views here.
 
-class GetPaymentLinkView(APIView):
+class GetPaymentLinkView(generics.GenericAPIView):
+    serializer_class = CheckoutSerializer
+    permission_classes = [IsAuthenticated]
     
-    def get(self, request):
-        plan_id = request.query_params.get("plan")
+    def post(self, request):
+        serializer = self.get_serializer(data=request.data, context={"request": request})
+        serializer.is_valid(raise_exception=True)
+
+        plan = serializer.validated_data
         
-        if not plan_id:
-            return Response({"error": "Plan ID is required"}, status=status.HTTP_400_BAD_REQUEST)
-
-        try:
-            plan = Plan.objects.get(id=plan_id)
-        except Plan.DoesNotExist:
-            return Response({"error": "Plan not found"}, status=status.HTTP_404_NOT_FOUND)
-
-
         payment = Payments.objects.create(
             user=request.user,
             plan=plan,
@@ -53,6 +49,7 @@ class GetPaymentLinkView(APIView):
                 "status": False,
                 "error": str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
+
 
 class PaymentSuccessView(APIView):
     permission_classes = []
