@@ -53,3 +53,49 @@ class GetProvidersView(generics.GenericAPIView):
         except Exception as e:
             return Response({"status": False,"log": str(e)},status=status.HTTP_404_NOT_FOUND)
 
+
+
+
+class GetGenresView(generics.GenericAPIView):
+    permission_classes = [permissions.AllowAny]
+    serializer_class = GetGenresSerializer
+
+    def get(self, request):
+        cached_data = cache.get("tmdb_genres")
+        if cached_data:
+            print("Using cached data")
+            return Response({"status": True, "log": self.get_serializer(cached_data, many=True).data}, status=status.HTTP_200_OK)   
+        
+        try:
+            print("Using fresh data")
+            access_token = getattr(settings, 'TMDB_ACCESS_TOKEN', None)
+            if not access_token:
+                return Response({"status": False,"log": "TMDB access token not configured."},
+                                status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+            headers = {
+                "Authorization": f"Bearer {access_token}"
+            }
+
+            res = requests.get(
+                "https://api.themoviedb.org/3/genre/movie/list",
+                headers=headers
+            )
+            res.raise_for_status()
+
+            data = res.json().get("genres", [])
+
+            response = [
+                {
+                    "genre_id": i.get("id"),
+                    "genre_name": i.get("name"),
+                }
+                for i in data
+            ]
+
+            cache.set("tmdb_genres", response, timeout=7*86400)
+
+            return Response({"status": True, "log": self.get_serializer(response, many=True).data}, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({"status": False,"log": str(e)},status=status.HTTP_404_NOT_FOUND)
