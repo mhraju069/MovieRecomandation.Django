@@ -11,6 +11,7 @@ channels
 channels-redis
 celery
 redis
+django-redis
 
 # Utilities
 requests

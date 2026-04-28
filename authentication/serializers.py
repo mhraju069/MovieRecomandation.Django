@@ -27,6 +27,8 @@ class SignUpSerializer(serializers.ModelSerializer):
         return user
 
 
+
+
 class SignInSerializer(serializers.Serializer):
     email = serializers.EmailField()
     password = serializers.CharField(style={'input_type': 'password'})
@@ -49,6 +51,8 @@ class SignInSerializer(serializers.Serializer):
             else:
                 raise serializers.ValidationError("User not found")
         raise serializers.ValidationError("Email and password are required")
+
+
 
 
 class UserProfileSerializer(serializers.ModelSerializer):
@@ -85,6 +89,8 @@ class UserProfileSerializer(serializers.ModelSerializer):
         return instance
 
 
+
+
 class GetOtpSerializer(serializers.Serializer):
     email = serializers.EmailField()
     task = serializers.CharField(max_length=100,required=False,allow_blank=True,allow_null=True)
@@ -98,6 +104,8 @@ class GetOtpSerializer(serializers.Serializer):
         return res
     
 
+
+
 class VerifyOtpSerializer(serializers.Serializer):
     email = serializers.EmailField()
     otp = serializers.CharField(max_length=6)
@@ -108,6 +116,8 @@ class VerifyOtpSerializer(serializers.Serializer):
 
         res = verify_otp(email, otp_code)
         return res
+
+
 
 
 class ResetPasswordSerializer(serializers.Serializer):
@@ -130,3 +140,13 @@ class ResetPasswordSerializer(serializers.Serializer):
         user.set_password(new_password)
         user.save()
         return {"status": True, "log": "Password reset successfully"}
+
+
+
+
+class GetPlatformSerializer(serializers.Serializer):
+    provider_id = serializers.IntegerField()
+    provider_name = serializers.CharField()
+    logo_path = serializers.CharField()
+
+    

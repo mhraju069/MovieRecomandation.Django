@@ -1,3 +1,6 @@
+import requests,json
+from django.conf import settings
+from django.core.cache import cache
 from .models import *
 from .helper import *
 from .serializers import *
@@ -27,6 +30,8 @@ class SignUpView(generics.CreateAPIView):
             "access": str(refresh.access_token),
         }, status=status.HTTP_201_CREATED)
 
+
+
     
 class SignInView(generics.CreateAPIView):
     serializer_class = SignInSerializer
@@ -45,11 +50,15 @@ class SignInView(generics.CreateAPIView):
         }, status=status.HTTP_200_OK)
 
 
+
+
 class UserRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = UserProfileSerializer
     permission_classes = [permissions.IsAuthenticated]
     def get_object(self):
         return User.objects.filter(email=self.request.user.email).first()
+
+
 
 
 class GetOtpView(generics.GenericAPIView):
@@ -63,6 +72,8 @@ class GetOtpView(generics.GenericAPIView):
         if res.get('status'):
             return Response(res, status=status.HTTP_200_OK)
         return Response(res, status=status.HTTP_400_BAD_REQUEST)
+
+
 
 
 class OtpVerifyView(generics.GenericAPIView):
@@ -88,6 +99,8 @@ class OtpVerifyView(generics.GenericAPIView):
         return Response(res, status=status.HTTP_400_BAD_REQUEST)
         
 
+
+
 class ResetPasswordView(generics.GenericAPIView):
     permission_classes = [permissions.IsAuthenticated]
     serializer_class = ResetPasswordSerializer
@@ -101,10 +114,60 @@ class ResetPasswordView(generics.GenericAPIView):
         return Response(res, status=status.HTTP_400_BAD_REQUEST)
 
 
+
+
 class GetProfileView(APIView):
     permission_classes = [permissions.IsAuthenticated]
     
     def get(self, request):
         user = UserProfileSerializer(request.user,context={"request": request}).data
         return Response({"status": True, "log": user}, status=200)
+
+
+
+
+class GetProvidersView(generics.GenericAPIView):
+    permission_classes = [permissions.AllowAny]
+    serializer_class = GetPlatformSerializer
+
+    def get(self, request):
+        cached_data = cache.get("tmdb_providers")
+        if cached_data:
+            print("Using cached data")
+            return Response({"status": True, "log": self.get_serializer(cached_data, many=True).data}, status=status.HTTP_200_OK)   
+        
+        try:
+            print("Using fresh data")
+            access_token = getattr(settings, 'TMDB_ACCESS_TOKEN', None)
+            if not access_token:
+                return Response({"status": False,"log": "TMDB access token not configured."},
+                                status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+            headers = {
+                "Authorization": f"Bearer {access_token}"
+            }
+
+            res = requests.get(
+                "https://api.themoviedb.org/3/watch/providers/tv",
+                headers=headers
+            )
+            res.raise_for_status()
+
+            data = res.json().get("results", [])
+
+            response = [
+                {
+                    "provider_id": i.get("provider_id"),
+                    "provider_name": i.get("provider_name"),
+                    "logo_path": f"https://image.tmdb.org/t/p/original{i.get('logo_path')}",
+                }
+                for i in data[:20]
+            ]
+
+            cache.set("tmdb_providers", response, timeout=86400)
+
+            return Response({"status": True, "log": self.get_serializer(response, many=True).data}, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({"status": False,"log": str(e)},status=status.HTTP_404_NOT_FOUND)
 
