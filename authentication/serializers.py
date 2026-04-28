@@ -144,9 +144,3 @@ class ResetPasswordSerializer(serializers.Serializer):
 
 
 
-class GetPlatformSerializer(serializers.Serializer):
-    provider_id = serializers.IntegerField()
-    provider_name = serializers.CharField()
-    logo_path = serializers.CharField()
-
-    

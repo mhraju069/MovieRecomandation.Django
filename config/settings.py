@@ -48,7 +48,7 @@ INSTALLED_APPS = [
     'authentication',
     'subscription',
     'payment',
-
+    'tmdb',
 ]
 
 MIDDLEWARE = [

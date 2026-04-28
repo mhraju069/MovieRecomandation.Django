@@ -6,6 +6,7 @@ from rest_framework_simplejwt.views import TokenRefreshView, TokenVerifyView
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api-auth/', include('rest_framework.urls')),
+    path("tmdb/api/v1/", include("tmdb.urls")),
     path("auth/api/v1/", include("authentication.urls")),
     path("subscription/api/v1/", include("subscription.urls")),
     path("payment/api/v1/", include("payment.urls")),
