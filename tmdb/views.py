@@ -7,6 +7,21 @@ from rest_framework.response import Response
 from rest_framework import generics, status,permissions,views
 
 # Create your views here.
+class AddPrefrences(generics.GenericAPIView):
+    permission_classes = [permissions.IsAuthenticated]
+    serializer_class = PrefrencesSerializer
+
+    def post(self, request):
+        try:
+            serializer = self.get_serializer(data=request.data,context={'request': request})
+            if serializer.is_valid():
+                serializer.save()
+                return Response({"status": True, "log": "Prefrences added successfully"}, status=status.HTTP_200_OK)
+            return Response({"status": False,"log": serializer.errors},status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({"status": False,"log": str(e)},status=status.HTTP_404_NOT_FOUND)
+
+
 
 
 class GetProvidersView(generics.GenericAPIView):
