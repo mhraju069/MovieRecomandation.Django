@@ -5,3 +5,5 @@ from unfold.admin import ModelAdmin
 
 admin.site.register(UserPrefrences,ModelAdmin)
 admin.site.register(ReviewAndRating,ModelAdmin)
+admin.site.register(FeedPost,ModelAdmin)
+admin.site.register(FeedPostComment,ModelAdmin)

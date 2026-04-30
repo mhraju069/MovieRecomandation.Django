@@ -5,6 +5,7 @@ from .serializers import *
 from django.core.cache import cache
 from rest_framework.response import Response
 from rest_framework import generics, status,permissions,views
+from config.pagination import paginate_response,CustomLimitPagination
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 
 
@@ -413,8 +414,40 @@ class AddReviewAndRating(generics.GenericAPIView):
             serializer = self.get_serializer(instance, data=request.data)
             if serializer.is_valid():
                 serializer.save()
+                valid_movie_id = serializer.validated_data.get("movie_id")
+                post, created = FeedPost.objects.get_or_create(
+                    user=request.user,
+                    review=serializer.instance,
+                    defaults={'tags': get_movie_tags(valid_movie_id)}
+                )
+                if not created and not post.tags:
+                    post.tags = get_movie_tags(valid_movie_id)
+                    post.save(update_fields=['tags'])
                 return Response({"status": True, "log": "Review added successfully"}, status=status.HTTP_200_OK)
             return Response({"status": False, "log": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
             print("⚠️Error in AddReviewAndRating:", e)
             return Response({"status": False, "log": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    
+
+
+class FeedApiView(generics.GenericAPIView):
+    permission_classes = [permissions.IsAuthenticated]
+    serializer_class = FeedPostsSerializer
+
+    def get(self, request):
+        try:
+            feed_param = request.query_params.get("feed", "foryou")
+            
+            if feed_param == "foryou":
+                feed_data = get_feed_posts_by_prefrences(request)
+            else:
+                feed_data = []
+            
+            paginated = paginate_response(request, feed_data, FeedPostsSerializer, CustomLimitPagination)
+            return Response({"status": True, "log": paginated.data}, status=status.HTTP_200_OK)
+        except Exception as e:
+            print("⚠️Error in FeedApiView:", e)
+            return Response({"status": False, "log": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    

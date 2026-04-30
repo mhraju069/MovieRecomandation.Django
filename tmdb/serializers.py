@@ -70,3 +70,17 @@ class AddReviewAndRatingSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Rating must be between 0 and 10")
         
         return attrs
+
+
+
+class FeedPostsSerializer(serializers.Serializer):
+    user = serializers.CharField()
+    movie_id = serializers.IntegerField()
+    review = serializers.CharField(allow_null=True, required=False)
+    rating = serializers.IntegerField()
+    video = serializers.CharField(allow_null=True, required=False)
+    genre = serializers.JSONField(allow_null=True, required=False)
+    likes= serializers.IntegerField()
+    liked=serializers.BooleanField()
+    comments= serializers.IntegerField()
+    created_at = serializers.DateTimeField()
