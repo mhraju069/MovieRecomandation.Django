@@ -4,3 +4,4 @@ from unfold.admin import ModelAdmin
 # Register your models here.
 
 admin.site.register(UserPrefrences,ModelAdmin)
+admin.site.register(ReviewAndRating,ModelAdmin)

@@ -327,3 +327,69 @@ class HomeApiView(views.APIView):
             print("⚠️Error in get_movies_by_genre:", e)
             return None
 
+
+
+
+class MovieDetailView(views.APIView):
+    def get(self, request, movie_id):
+        movie_rating = self.GetRating(request, movie_id)
+        
+        cached_data = cache.get(f"tmdb_movie_details_{movie_id}")
+        if cached_data:
+            print("Using cached data")
+            cached_data["ratings"] = movie_rating
+            return Response({"status": True, "log": cached_data}, status=status.HTTP_200_OK)
+
+
+        print("Using fresh data")
+        try:
+            res = requests.get(f"https://api.themoviedb.org/3/movie/{movie_id}?append_to_response=videos,images,credits", headers=tmdb_token())
+            res.raise_for_status()
+            movie = res.json()
+
+            response = {
+                "type": movie.get("media_type", "movie"),
+                "title": movie.get("title"),
+                "genre": [g.get("name") for g in movie.get("genres", [])],
+                "language": movie.get("original_language"),
+                "release_date": movie.get("release_date"),
+                "poster_path": f"https://image.tmdb.org/t/p/original{movie.get('poster_path')}" if movie.get('poster_path') else None,
+                "backdrop_path": f"https://image.tmdb.org/t/p/original{movie.get('backdrop_path')}" if movie.get('backdrop_path') else None,
+                "runtime": movie.get("runtime"),
+                "budget": movie.get("budget"),
+                "overview": movie.get("overview"),
+                "trailer":[f"https://www.youtube.com/watch?v={vid.get('key')}" for vid in movie.get("videos", {}).get("results", []) if vid.get("type") == "Trailer"] or None,
+                "producer": [crew.get("name") for crew in movie.get("credits", {}).get("crew", []) if crew.get("job") == "Producer"] or "Unknown",
+                "director": [crew.get("name") for crew in movie.get("credits", {}).get("crew", []) if crew.get("job") == "Director"] or "Unknown",
+                "cast": {"profile" : [{"name": cast.get("name"), "profile_path": f"https://image.tmdb.org/t/p/original{cast.get('profile_path')}" if cast.get('profile_path') else None} for cast in movie.get("credits", {}).get("cast", [])][:10],"count" : len(movie.get("credits", {}).get("cast", []) + movie.get("credits", {}).get("crew", []))},
+            }
+
+            cache.set(f"tmdb_movie_details_{movie_id}", response, timeout=360*86400)
+
+            response["ratings"] = movie_rating
+            return Response({"status": True, "log": response}, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            print("⚠️Error in MovieDetailView:", e)
+            return Response({"status": False, "log": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        
+
+
+    def GetRating(self, request, movie_id):
+        try:
+            reviews = ReviewAndRating.objects.filter(movie_id=movie_id).exclude(rating__isnull=True)
+            response = [
+                {
+                    'user': i.user.name or i.user.email[:i.user.email.index('@')].title(),
+                    'review': i.review ,
+                    "rating": i.rating,
+                    'video': request.build_absolute_uri(i.video.url) if i.video else None,
+                    "created_at": i.created_at,
+                }
+                for i in reviews[:5]
+            ] 
+            return response
+        except Exception as e:
+            print("⚠️Error in GetRating:", e)
+            return None
