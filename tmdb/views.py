@@ -5,6 +5,8 @@ from .serializers import *
 from django.core.cache import cache
 from rest_framework.response import Response
 from rest_framework import generics, status,permissions,views
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
+
 
 # Create your views here.
 class AddPrefrences(generics.GenericAPIView):
@@ -393,3 +395,26 @@ class MovieDetailView(views.APIView):
         except Exception as e:
             print("⚠️Error in GetRating:", e)
             return None
+
+
+
+class AddReviewAndRating(generics.GenericAPIView):
+    permission_classes = [permissions.IsAuthenticated]
+    serializer_class = AddReviewAndRatingSerializer
+    parser_classes = (MultiPartParser, FormParser, JSONParser)
+
+    def post(self, request):
+        try:
+            movie_id = request.data.get("movie_id")
+            instance = None
+            if movie_id:
+                instance = ReviewAndRating.objects.filter(user=request.user, movie_id=movie_id).first()
+
+            serializer = self.get_serializer(instance, data=request.data)
+            if serializer.is_valid():
+                serializer.save()
+                return Response({"status": True, "log": "Review added successfully"}, status=status.HTTP_200_OK)
+            return Response({"status": False, "log": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            print("⚠️Error in AddReviewAndRating:", e)
+            return Response({"status": False, "log": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
