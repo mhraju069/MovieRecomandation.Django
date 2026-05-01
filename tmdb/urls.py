@@ -8,4 +8,5 @@ urlpatterns = [
     path('add-review/', AddReviewAndRating.as_view(), name='add_review'),
     path('add-prefrences/', AddPrefrences.as_view(), name='add_prefrences'),
     path('movie/<int:movie_id>/', MovieDetailView.as_view(), name='movie_detail'),
+    path('update-prefrences/', UpdatePreferencesView.as_view(), name='update_prefrences'),
 ]

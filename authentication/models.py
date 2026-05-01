@@ -99,3 +99,19 @@ class OTP(models.Model):
 
 
 
+
+class Follows(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    follower = models.ForeignKey(User, on_delete=models.CASCADE, related_name='following')
+    following = models.ForeignKey(User, on_delete=models.CASCADE, related_name='followers')
+    status = models.BooleanField(default=False, verbose_name="Follow Status")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('follower', 'following')
+
+    def __str__(self):
+        return f"{self.follower} follows {self.following}"
+
+
+

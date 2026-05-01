@@ -399,6 +399,7 @@ class MovieDetailView(views.APIView):
 
 
 
+
 class AddReviewAndRating(generics.GenericAPIView):
     permission_classes = [permissions.IsAuthenticated]
     serializer_class = AddReviewAndRatingSerializer
@@ -432,6 +433,7 @@ class AddReviewAndRating(generics.GenericAPIView):
     
 
 
+
 class FeedApiView(generics.GenericAPIView):
     permission_classes = [permissions.IsAuthenticated]
     serializer_class = FeedPostsSerializer
@@ -450,4 +452,27 @@ class FeedApiView(generics.GenericAPIView):
         except Exception as e:
             print("⚠️Error in FeedApiView:", e)
             return Response({"status": False, "log": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+
+
+
+class UpdatePreferencesView(generics.GenericAPIView):
+    permission_classes = [permissions.IsAuthenticated]
+    serializer_class = PrefrencesSerializer
+    parser_classes = (MultiPartParser, FormParser, JSONParser)
     
+    def patch(self, request):
+        try:
+            user = request.user
+            prefrences, created = UserPrefrences.objects.get_or_create(user=user)
+            
+            serializer = self.get_serializer(prefrences, data=request.data, partial=True)
+            if serializer.is_valid():
+                serializer.save()
+                return Response({"status": True, "log": "Preferences updated successfully"}, status=status.HTTP_200_OK)
+            return Response({"status": False, "log": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            print("⚠️Error in UpdatePreferencesView:", e)
+            return Response({"status": False, "log": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+

@@ -1,6 +1,7 @@
 import requests,json
 from django.conf import settings
 from django.core.cache import cache
+from .utils import *
 from .models import *
 from .helper import *
 from .serializers import *
@@ -125,3 +126,137 @@ class GetProfileView(APIView):
 
 
 
+
+class AddFollowerView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+    def post(self, request, user_id):
+        user = request.user
+
+        if str(user.id) == str(user_id):
+            return Response({"status": False, "log": "You cannot follow yourself"}, status=400)
+
+        try:
+            target_user = User.objects.get(id=user_id)
+        except User.DoesNotExist:
+            return Response({"status": False, "log": "User not found"}, status=404)
+
+        follow_req, created = Follows.objects.get_or_create(
+            follower=user,
+            following=target_user
+        )
+        if not created:
+            if follow_req.status:
+                return Response({"status": False, "log": "You are already following this user"}, status=400)
+            else:
+                return Response({"status": False, "log": "Follow request already sent"}, status=400)
+
+        return Response({"status": True, "log": "Follow request sent successfully"}, status=200)
+
+
+
+
+
+class UnFollowView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+    def post(self, request, user_id):
+        user = request.user
+
+        if str(user.id) == str(user_id):
+            return Response({"status": False, "log": "You cannot unfollow yourself"}, status=400)
+
+        try:
+            target_user = User.objects.get(id=user_id)
+        except User.DoesNotExist:
+            return Response({"status": False, "log": "User not found"}, status=404)
+
+        follow_req = Follows.objects.filter(
+            follower=user,
+            following=target_user
+        ).first()
+
+        if not follow_req:
+            return Response({"status": False, "log": "You are not following this user"}, status=400)
+
+        follow_req.delete()
+
+        return Response({"status": True, "log": "Unfollowed successfully"}, status=200)
+
+
+
+
+
+class GetFollowersPendingView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+    def get(self, request):
+        user = request.user
+        follows = Follows.objects.filter(following=user, status=False).select_related('follower')
+        serializer = UserProfileSerializer(follows, many=True, context={"request": request})
+        return Response({"status": True, "log": serializer.data}, status=200)
+
+
+
+
+class ConfirmFollowRequestView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+    def post(self, request):
+        user = request.user
+        follower_user_id = request.data.get('user_id')
+
+        if not User.objects.filter(id=follower_user_id).exists():
+            return Response({"status": False, "log": "User not found"}, status=404)
+
+        try:
+            follow_req = Follows.objects.get(follower_id=follower_user_id, following=user)
+            if follow_req.status:
+                return Response({"status": False, "log": "Follow request already accepted"}, status=400)
+                
+            follow_req.status = True
+            follow_req.save()
+            return Response({"status": True, "log": "Follow request accepted"}, status=200)
+        except Follows.DoesNotExist:
+            return Response({"status": False, "log": "Follow request not found"}, status=404)
+
+
+
+
+class GetFollowersView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+    def get(self, request, user_id):
+        try:
+            target_user = User.objects.get(id=user_id)
+        except User.DoesNotExist:
+            return Response({"status": False, "log": "User not found"}, status=404)
+            
+        # The target_user is the person being followed, so we look for Follows where following=target_user
+        follows = Follows.objects.filter(following=target_user, status=True).select_related('follower')
+        followers_list = [UserProfileSerializer(f.follower).data for f in follows]
+        
+        return Response({"status": True, "log": followers_list}, status=200)
+
+
+
+
+class GetFollowingView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+    def get(self, request):
+        target_user = request.user
+        follows = Follows.objects.filter(follower=target_user, status=True).select_related('following')
+        following_list = [UserProfileSerializer(f.following).data for f in follows]
+        return Response({"status": True, "log": following_list}, status=200)
+
+
+
+
+class FriendSuggestionsView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+    def get(self, request):
+        user = request.user
+        suggested_users = get_friends_by_preferences(user)
+        
+        # Fallback: if no preferences match, just suggest users they don't follow
+        if not suggested_users:
+            following_ids = set(user.following.filter(status=True).values_list('following_id', flat=True))
+            suggested_users = [u for u in User.objects.all() if u != user and u.id not in following_ids][:20]
+
+        suggestions = [UserProfileSerializer(u).data for u in suggested_users]
+        return Response({"status": True, "log": suggestions}, status=200)
