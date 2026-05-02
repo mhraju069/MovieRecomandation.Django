@@ -61,8 +61,8 @@ class UserProfileSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = User
-        exclude = ['last_login','block', 'is_active', 'is_staff', 'is_superuser', 'groups', 'user_permissions', 'created_at']
-        read_only_fields = ['id', 'email', 'role']
+        exclude = ['last_login','block','role','is_active', 'is_staff', 'is_superuser', 'groups', 'user_permissions', 'created_at']
+        read_only_fields = ['id', 'email']
         extra_kwargs = {
             'password': {'write_only': True, 'required': False}
         }
