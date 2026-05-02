@@ -13,15 +13,17 @@ def get_friends_by_preferences(user):
     if not my_genres and not my_platforms:
         return []
 
-    # Exclude current user and people they already follow
-    following_ids = set(user.following.filter(status=True).values_list('following_id', flat=True))
+    # Exclude current user, people they already follow, and people who follow them
+    following_ids = set(user.following.values_list('following_id', flat=True))
+    follower_ids = set(user.followers.values_list('follower_id', flat=True))
+    excluded_ids = following_ids.union(follower_ids)
         
     other_prefs = UserPrefrences.objects.exclude(user=user).select_related('user')
     suggestions = []
 
     for pref in other_prefs:
-        # Skip if already following
-        if pref.user.id in following_ids:
+        # Skip if already following or a follower
+        if pref.user.id in excluded_ids:
             continue
             
         their_genres = set([str(g.get("name")).lower() for g in pref.genre if isinstance(g, dict) and g.get("name")] if pref.genre else [])

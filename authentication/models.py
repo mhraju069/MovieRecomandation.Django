@@ -40,6 +40,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     email = models.EmailField(max_length=255,unique=True,verbose_name="User Email")
     name = models.CharField(max_length=200, blank=True, null=True,verbose_name="User Name")
+    bio = models.TextField(blank=True, null=True,verbose_name="Bio")
     image = models.ImageField(upload_to='profile_images/', blank=True, null=True,)
     role = models.CharField(max_length=10, choices=ROLE, default='user',verbose_name="User Role")
     is_active = models.BooleanField(default=False,verbose_name="Active User")

@@ -121,8 +121,16 @@ class GetProfileView(APIView):
     permission_classes = [permissions.IsAuthenticated]
     
     def get(self, request):
-        user = UserProfileSerializer(request.user,context={"request": request}).data
-        return Response({"status": True, "log": user}, status=200)
+        user = request.user
+        serializer = UserProfileSerializer(user, context={"request": request})
+        
+        data = serializer.data
+        
+        data['reviews'] = user.review_and_rating.count()
+        data['following'] = user.following.filter(status=True).count()
+        data['followers'] = user.followers.filter(status=True).count()
+        
+        return Response({"status": True, "log": data}, status=200)
 
 
 
@@ -190,7 +198,8 @@ class GetFollowersPendingView(APIView):
     def get(self, request):
         user = request.user
         follows = Follows.objects.filter(following=user, status=False).select_related('follower')
-        serializer = UserProfileSerializer(follows, many=True, context={"request": request})
+        pending_users = [f.follower for f in follows]
+        serializer = UserProfileSerializer(pending_users, many=True, context={"request": request})
         return Response({"status": True, "log": serializer.data}, status=200)
 
 
@@ -198,9 +207,9 @@ class GetFollowersPendingView(APIView):
 
 class ConfirmFollowRequestView(APIView):
     permission_classes = [permissions.IsAuthenticated]
-    def post(self, request):
+    def post(self, request, user_id):
         user = request.user
-        follower_user_id = request.data.get('user_id')
+        follower_user_id = user_id
 
         if not User.objects.filter(id=follower_user_id).exists():
             return Response({"status": False, "log": "User not found"}, status=404)
@@ -221,16 +230,9 @@ class ConfirmFollowRequestView(APIView):
 
 class GetFollowersView(APIView):
     permission_classes = [permissions.IsAuthenticated]
-    def get(self, request, user_id):
-        try:
-            target_user = User.objects.get(id=user_id)
-        except User.DoesNotExist:
-            return Response({"status": False, "log": "User not found"}, status=404)
-            
-        # The target_user is the person being followed, so we look for Follows where following=target_user
-        follows = Follows.objects.filter(following=target_user, status=True).select_related('follower')
-        followers_list = [UserProfileSerializer(f.follower).data for f in follows]
-        
+    def get(self, request):
+        follows = Follows.objects.filter(following=request.user, status=True).select_related('follower')
+        followers_list = [UserProfileSerializer(f.follower,context={"request":request}).data for f in follows]
         return Response({"status": True, "log": followers_list}, status=200)
 
 
@@ -253,10 +255,12 @@ class FriendSuggestionsView(APIView):
         user = request.user
         suggested_users = get_friends_by_preferences(user)
         
-        # Fallback: if no preferences match, just suggest users they don't follow
+        # Fallback: if no preferences match, just suggest users they don't follow and who don't follow them
         if not suggested_users:
-            following_ids = set(user.following.filter(status=True).values_list('following_id', flat=True))
-            suggested_users = [u for u in User.objects.all() if u != user and u.id not in following_ids][:20]
+            following_ids = set(user.following.values_list('following_id', flat=True))
+            follower_ids = set(user.followers.values_list('follower_id', flat=True))
+            excluded_ids = following_ids.union(follower_ids)
+            suggested_users = [u for u in User.objects.all() if u != user and u.id not in excluded_ids][:20]
 
-        suggestions = [UserProfileSerializer(u).data for u in suggested_users]
+        suggestions = [UserProfileSerializer(u,context={"request":request}).data for u in suggested_users]
         return Response({"status": True, "log": suggestions}, status=200)
