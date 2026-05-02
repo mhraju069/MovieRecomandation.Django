@@ -17,4 +17,17 @@ class SupportView(generics.ListAPIView):
         return self.queryset.first()
         
 
-    
+# class PrivacyPolicyView(generics.ListAPIView):
+#     queryset = PrivacyPolicy.objects.all()
+#     serializer_class = PrivacyPolicySerializer
+
+#     def get_queryset(self):
+#         return self.queryset.first()
+
+
+# class TermsAndConditionsView(generics.ListAPIView):
+#     queryset = TermsAndConditions.objects.all()
+#     serializer_class = TermsAndConditionsSerializer
+
+#     def get_queryset(self):
+#         return self.queryset.first()
