@@ -47,10 +47,11 @@ class AddReviewAndRatingSerializer(serializers.ModelSerializer):
     rating = serializers.IntegerField(required=True)
     review = serializers.CharField(required=True)
     movie_id = serializers.IntegerField(required=True)
+    type = serializers.CharField(required=False, default="movie")
     
     class Meta:
         model = ReviewAndRating
-        fields = ["user", "movie_id", "review", "rating","video"]
+        fields = ["user", "movie_id", "review", "rating","video", "type"]
 
     def validate(self, attrs):
         movie_id = attrs.get("movie_id")

@@ -408,9 +408,10 @@ class AddReviewAndRating(generics.GenericAPIView):
     def post(self, request):
         try:
             movie_id = request.data.get("movie_id")
+            type = request.data.get("type", "movie")
             instance = None
             if movie_id:
-                instance = ReviewAndRating.objects.filter(user=request.user, movie_id=movie_id).first()
+                instance = ReviewAndRating.objects.filter(user=request.user, movie_id=movie_id, type=type).first()
 
             serializer = self.get_serializer(instance, data=request.data)
             if serializer.is_valid():

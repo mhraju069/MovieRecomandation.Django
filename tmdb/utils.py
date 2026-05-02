@@ -2,6 +2,7 @@ import requests
 from django.conf import settings
 from django.core.cache import cache
 from .models import FeedPost, UserPrefrences
+from .serializers import FeedPostsSerializer
 
 
 def tmdb_token():
@@ -13,6 +14,58 @@ def tmdb_token():
     }
     return headers
 
+
+
+def get_post(user, type, request=None):
+    from django.db.models import Avg
+    from .models import ReviewAndRating
+    reviews = ReviewAndRating.objects.filter(user=user, type=type).order_by('-created_at')
+    
+    movie_list = []
+    seen_movies = set()
+    
+    for review in reviews:
+        if review.movie_id in seen_movies:
+            continue
+        seen_movies.add(review.movie_id)
+        
+        # Aggregate local reviews rating for the average rating
+        avg_rating = ReviewAndRating.objects.filter(movie_id=review.movie_id, type=type).aggregate(Avg('rating'))['rating__avg']
+        if avg_rating is not None:
+            avg_rating = round(avg_rating, 1)
+        else:
+            avg_rating = review.rating
+
+        movie_data = {
+            "movie_id": review.movie_id,
+            "image": None,
+            "average_rating": avg_rating
+        }
+        
+        cache_key = f"tmdb_movie_details_{review.movie_id}"
+        movie_details = cache.get(cache_key)
+        
+        if not movie_details or "image" not in movie_details:
+            try:
+                tmdb_type = 'tv' if type == 'tv' else 'movie'
+                res = requests.get(f"https://api.themoviedb.org/3/{tmdb_type}/{review.movie_id}", headers=tmdb_token(), timeout=5)
+                if res.status_code == 200:
+                    data = res.json()
+                    poster = data.get("poster_path")
+                    movie_data["image"] = f"https://image.tmdb.org/t/p/w500{poster}" if poster else None
+                    
+                    if not movie_details:
+                        movie_details = {}
+                    movie_details["image"] = movie_data["image"]
+                    cache.set(cache_key, movie_details, timeout=86400 * 7)
+            except Exception as e:
+                print(f"Error fetching TMDB details for {review.movie_id}: {e}")
+        else:
+            movie_data["image"] = movie_details.get("image")
+            
+        movie_list.append(movie_data)
+        
+    return movie_list
 
 
 

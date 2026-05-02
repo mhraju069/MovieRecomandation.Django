@@ -5,6 +5,7 @@ from .utils import *
 from .models import *
 from .helper import *
 from .serializers import *
+from tmdb.utils import get_post
 from django.shortcuts import render
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -122,13 +123,14 @@ class GetProfileView(APIView):
     
     def get(self, request):
         user = request.user
+        type = request.query_params.get('type','movie')
         serializer = UserProfileSerializer(user, context={"request": request})
-        
         data = serializer.data
         
         data['reviews'] = user.review_and_rating.count()
         data['following'] = user.following.filter(status=True).count()
         data['followers'] = user.followers.filter(status=True).count()
+        data['media'] = get_post(user, type, request)
         
         return Response({"status": True, "log": data}, status=200)
 

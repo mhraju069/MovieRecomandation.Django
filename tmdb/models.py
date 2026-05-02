@@ -22,6 +22,7 @@ class ReviewAndRating(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, related_name='review_and_rating', on_delete=models.CASCADE)
     movie_id = models.IntegerField(blank=True, null=True)
+    type = models.CharField(max_length=20, default='movie')
     review = models.TextField(blank=True, null=True)
     video = models.FileField(upload_to='reviews', blank=True, null=True)
     rating = models.IntegerField(blank=True, null=True)
