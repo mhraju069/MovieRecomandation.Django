@@ -1,7 +1,8 @@
-from django.shortcuts import render
-from rest_framework import generics
-from .models import FAQ, Support
 from .serializers import *
+from .models import FAQ, Support
+from rest_framework import generics
+from django.shortcuts import render
+from rest_framework.exceptions import NotFound
 
 
 class FAQView(generics.ListAPIView):
@@ -9,25 +10,34 @@ class FAQView(generics.ListAPIView):
     serializer_class = FAQSerializer
 
 
-class SupportView(generics.ListAPIView):
+class SupportView(generics.RetrieveAPIView):
     queryset = Support.objects.all()
     serializer_class = SupportSerializer
 
-    def get_queryset(self):
-        return self.queryset.first()
+    def get_object(self):
+        obj = self.get_queryset().first()
+        if not obj:
+            raise NotFound("Support information not found.")
+        return obj
         
 
-# class PrivacyPolicyView(generics.ListAPIView):
-#     queryset = PrivacyPolicy.objects.all()
-#     serializer_class = PrivacyPolicySerializer
+class PrivacyPolicyView(generics.RetrieveAPIView):
+    queryset = PrivacyPolicy.objects.all()
+    serializer_class = PrivacyPolicySerializer
 
-#     def get_queryset(self):
-#         return self.queryset.first()
+    def get_object(self):
+        obj = self.get_queryset().first()
+        if not obj:
+            raise NotFound("Privacy policy not found.")
+        return obj
 
 
-# class TermsAndConditionsView(generics.ListAPIView):
-#     queryset = TermsAndConditions.objects.all()
-#     serializer_class = TermsAndConditionsSerializer
+class TermsAndConditionsView(generics.RetrieveAPIView):
+    queryset = TermsAndConditions.objects.all()
+    serializer_class = TermsAndConditionsSerializer
 
-#     def get_queryset(self):
-#         return self.queryset.first()
+    def get_object(self):
+        obj = self.get_queryset().first()
+        if not obj:
+            raise NotFound("Terms and conditions not found.")
+        return obj
