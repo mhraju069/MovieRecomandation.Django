@@ -135,11 +135,16 @@ def get_feed_posts_by_prefrences(request):
                     # Fallback to the saved tags in the FeedPost
                     movie_genres = [str(t).title() for t in post.tags] if post.tags else []
 
+                from django.db.models import Avg
+                avg = ReviewAndRating.objects.filter(movie_id=post.review.movie_id).aggregate(Avg('rating'))['rating__avg']
+                avg_rating = round(avg, 1) if avg is not None else post.review.rating
+
                 matched_posts.append({
                     "user": post.user.name if hasattr(post.user, 'name') and post.user.name else post.user.email.split('@')[0].title(),
                     "movie_id": post.review.movie_id,
                     "review": post.review.review,
-                    "rating": post.review.rating,
+                    "user_rating": post.review.rating,
+                    "average_rating": avg_rating,
                     "video": request.build_absolute_uri(post.review.video.url) if post.review.video else None,
                     "genre": movie_genres,
                     "likes": post.likes,
