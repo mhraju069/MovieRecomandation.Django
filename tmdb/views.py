@@ -1,7 +1,9 @@
+import json
 from .utils import *
 from .models import *
 import requests,random
 from .serializers import *
+from django.db.models import Avg
 from django.core.cache import cache
 from rest_framework.response import Response
 from rest_framework import generics, status,permissions,views
@@ -477,3 +479,108 @@ class UpdatePreferencesView(generics.GenericAPIView):
             print("⚠️Error in UpdatePreferencesView:", e)
             return Response({"status": False, "log": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+
+
+
+class AddWatchlist(generics.GenericAPIView):
+    permission_classes = [permissions.IsAuthenticated]
+    serializer_class = WatchlistSerializer
+    parser_classes = (MultiPartParser, FormParser, JSONParser)
+
+    def post(self, request, action):
+        try:
+            user = request.user
+            movie_id = request.data.get("movie_id")
+            item_type = request.data.get("type", "movie")
+
+            watchlist, _ = Watchlist.objects.get_or_create(user=user)
+            
+            if not isinstance(watchlist.movie_ids, dict):
+                watchlist.movie_ids = {}
+            
+            if action == "add":
+                if item_type not in watchlist.movie_ids or not isinstance(watchlist.movie_ids[item_type], list):
+                    watchlist.movie_ids[item_type] = []
+                if movie_id not in watchlist.movie_ids[item_type]:
+                    watchlist.movie_ids[item_type].append(movie_id)
+            else:
+                if item_type in watchlist.movie_ids and isinstance(watchlist.movie_ids[item_type], list):
+                    if movie_id in watchlist.movie_ids[item_type]:
+                        watchlist.movie_ids[item_type].remove(movie_id)
+            
+            watchlist.save()
+            return Response({"status": True, "log": "Watchlist updated successfully"}, status=status.HTTP_200_OK)
+        except Exception as e:
+            print("⚠️Error in AddWatchlist:", e)
+            return Response({"status": False, "log": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+
+
+class GetWatchlist(generics.GenericAPIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        try:
+            user = request.user
+            item_type = request.query_params.get('type', 'all')
+            watchlist, _ = Watchlist.objects.get_or_create(user=user)
+
+            if not isinstance(watchlist.movie_ids, dict):
+                watchlist.movie_ids = {}
+
+            id_and_type = []
+            if item_type == "all":
+                for key, ids in watchlist.movie_ids.items():
+                    if isinstance(ids, list):
+                        for mid in ids:
+                            id_and_type.append((mid, key))
+            else:
+                movie_ids = watchlist.movie_ids.get(item_type, [])
+                if isinstance(movie_ids, list):
+                    for mid in movie_ids:
+                        id_and_type.append((mid, item_type))
+
+            movies = []
+
+            for mid, key in id_and_type:
+                avg_rating = ReviewAndRating.objects.filter(movie_id=mid, type=key).aggregate(Avg('rating'))['rating__avg']
+                if avg_rating is not None:
+                    avg_rating = round(avg_rating, 1)
+                else:
+                    avg_rating = 0.0
+
+                movie_data = {
+                    "movie_id": mid,
+                    "image": None,
+                    "average_rating": avg_rating,
+                    "type": key
+                }
+
+                cache_key = f"tmdb_movie_details_{mid}"
+                movie_details = cache.get(cache_key)
+
+                if not movie_details or "image" not in movie_details:
+                    try:
+                        tmdb_type = 'tv' if key == 'tv' else 'movie'
+                        res = requests.get(f"https://api.themoviedb.org/3/{tmdb_type}/{mid}", headers=tmdb_token(), timeout=5)
+                        if res.status_code == 200:
+                            data = res.json()
+                            poster = data.get("poster_path")
+                            movie_data["image"] = f"https://image.tmdb.org/t/p/w500{poster}" if poster else None
+                            
+                            if not movie_details:
+                                movie_details = {}
+                            movie_details["image"] = movie_data["image"]
+                            cache.set(cache_key, movie_details, timeout=86400 * 7)
+                    except Exception as e:
+                        print(f"Error fetching TMDB details for {mid}: {e}")
+                else:
+                    movie_data["image"] = movie_details.get("image")
+
+                movies.append(movie_data)
+
+            return Response({"status": True, "log": movies}, status=status.HTTP_200_OK)
+        except Exception as e:
+            print("⚠️Error in Watchlist:", e)
+            return Response({"status": False, "log": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

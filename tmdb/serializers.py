@@ -85,3 +85,14 @@ class FeedPostsSerializer(serializers.Serializer):
     liked=serializers.BooleanField()
     comments= serializers.IntegerField()
     created_at = serializers.DateTimeField()
+
+
+
+class WatchlistSerializer(serializers.ModelSerializer):
+    user = serializers.HiddenField(default=serializers.CurrentUserDefault())
+    type = serializers.CharField(required=True)
+    movie_id = serializers.IntegerField(required=True)
+    
+    class Meta:
+        model = Watchlist
+        fields = ['user', 'type', 'movie_id']
