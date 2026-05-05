@@ -75,6 +75,7 @@ class AddReviewAndRatingSerializer(serializers.ModelSerializer):
 
 
 class FeedPostsSerializer(serializers.Serializer):
+    post_id = serializers.UUIDField()
     user = serializers.CharField()
     movie_id = serializers.IntegerField()
     review = serializers.CharField(allow_null=True, required=False)
@@ -83,7 +84,7 @@ class FeedPostsSerializer(serializers.Serializer):
     video = serializers.CharField(allow_null=True, required=False)
     genre = serializers.JSONField(allow_null=True, required=False)
     likes= serializers.IntegerField()
-    liked=serializers.BooleanField()
+    liked=serializers.BooleanField(required=False, default=False)
     comments= serializers.IntegerField()
     created_at = serializers.DateTimeField()
 
@@ -97,3 +98,19 @@ class WatchlistSerializer(serializers.ModelSerializer):
     class Meta:
         model = Watchlist
         fields = ['user', 'type', 'movie_id']
+
+
+
+class LikePostSerializer(serializers.Serializer):
+    post_id = serializers.UUIDField(required=True)
+
+
+
+class CommentOnPostSerializer(serializers.ModelSerializer):
+    user = serializers.HiddenField(default=serializers.CurrentUserDefault())
+    post_id = serializers.UUIDField(required=True)
+    comment = serializers.CharField(required=True)
+    
+    class Meta:
+        model = FeedPostComment
+        fields = ['user', 'post_id', 'comment']

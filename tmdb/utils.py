@@ -1,7 +1,8 @@
 import requests
 from django.conf import settings
 from django.core.cache import cache
-from .models import FeedPost, UserPrefrences
+from django.db.models import Avg
+from .models import FeedPost, UserPrefrences, ReviewAndRating
 from .serializers import FeedPostsSerializer
 
 
@@ -18,7 +19,6 @@ def tmdb_token():
 
 def get_post(user, type, request=None):
     from django.db.models import Avg
-    from .models import ReviewAndRating
     reviews = ReviewAndRating.objects.filter(user=user, type=type).order_by('-created_at')
     
     movie_list = []
@@ -135,11 +135,11 @@ def get_feed_posts_by_prefrences(request):
                     # Fallback to the saved tags in the FeedPost
                     movie_genres = [str(t).title() for t in post.tags] if post.tags else []
 
-                from django.db.models import Avg
                 avg = ReviewAndRating.objects.filter(movie_id=post.review.movie_id).aggregate(Avg('rating'))['rating__avg']
                 avg_rating = round(avg, 1) if avg is not None else post.review.rating
 
                 matched_posts.append({
+                    "post_id": str(post.id),
                     "user": post.user.name if hasattr(post.user, 'name') and post.user.name else post.user.email.split('@')[0].title(),
                     "movie_id": post.review.movie_id,
                     "review": post.review.review,
@@ -147,9 +147,9 @@ def get_feed_posts_by_prefrences(request):
                     "average_rating": avg_rating,
                     "video": request.build_absolute_uri(post.review.video.url) if post.review.video else None,
                     "genre": movie_genres,
-                    "likes": post.likes,
-                    "liked": False,
-                    "comments": post.comments.count() if hasattr(post, 'comments') else 0,
+                    "likes": post.get_likes_count(),
+                    "is_liked": post.is_liked(request.user),
+                    "comments": post.get_comments_count(),
                     "created_at": post.created_at,
                 })
                 

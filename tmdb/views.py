@@ -584,3 +584,28 @@ class GetWatchlist(generics.GenericAPIView):
         except Exception as e:
             print("⚠️Error in Watchlist:", e)
             return Response({"status": False, "log": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+
+
+class LikePostApiView(generics.GenericAPIView):
+    permission_classes = [permissions.IsAuthenticated]
+    serializer_class = LikePostSerializer
+
+    def post(self, request):
+        try:
+            user = request.user
+            post_id = request.data.get("post_id")
+            post = FeedPost.objects.get(id=post_id)
+            if post.likes.filter(id=user.id).exists():
+                post.likes.remove(user)
+                liked = False
+            else:
+                post.likes.add(user)
+                liked = True
+            return Response({"status": True, "liked": liked, "likes": post.likes.count()}, status=status.HTTP_200_OK)
+        except FeedPost.DoesNotExist:
+            return Response({"status": False, "log": "Post not found"}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            print("⚠️Error in LikePostApiView:", e)
+            return Response({"status": False, "log": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

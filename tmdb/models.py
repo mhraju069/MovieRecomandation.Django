@@ -40,11 +40,21 @@ class FeedPost(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, related_name='feed_post', on_delete=models.CASCADE)
     review = models.ForeignKey(ReviewAndRating, related_name='feed_post', on_delete=models.CASCADE)
     tags = models.JSONField(blank=True, null=True,verbose_name="Tags Prefrences")
-    likes = models.IntegerField(default=0)
+    likes = models.ManyToManyField(settings.AUTH_USER_MODEL, related_name='liked_posts',blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
         return f"Feed post for: {self.user} and {self.review}"
+
+    def get_likes_count(self):
+        return self.likes.count()
+    
+    def get_comments_count(self):
+        return self.comments.count()
+    
+    def is_liked(self, user):
+        return self.likes.filter(id=user.id).exists()
+    
 
     
     
