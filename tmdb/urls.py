@@ -4,6 +4,7 @@ urlpatterns = [
     path('home/', HomeApiView.as_view(), name='home'),
     path('feed/', FeedApiView.as_view(), name='feed'),
     path('genres/', GetGenresView.as_view(), name='get_genres'),
+    path('like-post/', LikePostApiView.as_view(), name='like_post'),
     path('providers/', GetProvidersView.as_view(), name='get_providers'),
     path('add-review/', AddReviewAndRating.as_view(), name='add_review'),
     path('add-prefrences/', AddPrefrences.as_view(), name='add_prefrences'),

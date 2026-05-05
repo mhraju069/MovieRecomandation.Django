@@ -603,7 +603,7 @@ class LikePostApiView(generics.GenericAPIView):
             else:
                 post.likes.add(user)
                 liked = True
-            return Response({"status": True, "liked": liked, "likes": post.likes.count()}, status=status.HTTP_200_OK)
+            return Response({"status": True, "log": "Liked successfully" if liked else "Like removed"}, status=status.HTTP_200_OK)
         except FeedPost.DoesNotExist:
             return Response({"status": False, "log": "Post not found"}, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
