@@ -114,3 +114,16 @@ class CommentOnPostSerializer(serializers.ModelSerializer):
     class Meta:
         model = FeedPostComment
         fields = ['user', 'post_id', 'comment']
+
+
+
+class FeedPostCommentSerializer(serializers.ModelSerializer):
+    user = serializers.SerializerMethodField()
+
+    class Meta:
+        model = FeedPostComment
+        fields = ['id', 'user', 'comment', 'created_at']
+        read_only_fields = ['id', 'created_at']
+
+    def get_user(self, obj):
+        return obj.user.name or obj.user.email.split('@')[0].title()

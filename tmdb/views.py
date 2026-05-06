@@ -609,3 +609,69 @@ class LikePostApiView(generics.GenericAPIView):
         except Exception as e:
             print("⚠️Error in LikePostApiView:", e)
             return Response({"status": False, "log": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+
+
+class CommentPostApiView(generics.GenericAPIView):
+    permission_classes = [permissions.IsAuthenticated]
+    serializer_class = FeedPostCommentSerializer
+
+    def post(self, request):
+        try:
+            user = request.user
+            post_id = request.data.get("post_id")
+            comment = request.data.get("comment")
+            post = FeedPost.objects.get(id=post_id)
+            FeedPostComment.objects.create(post=post, user=user, comment=comment)
+            return Response({"status": True, "log": "Commented successfully"}, status=status.HTTP_200_OK)
+        except FeedPost.DoesNotExist:
+            return Response({"status": False, "log": "Post not found"}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            print("⚠️Error in CommentPostApiView:", e)
+            return Response({"status": False, "log": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+
+
+class GetCommentsApiView(generics.ListAPIView):
+    permission_classes = [permissions.IsAuthenticated]
+    serializer_class = FeedPostCommentSerializer
+
+    def get_queryset(self):
+        post_id = self.kwargs.get("post_id")
+        return FeedPostComment.objects.filter(post_id=post_id).select_related('user').order_by('created_at')
+
+    def list(self, request, *args, **kwargs):
+        try:
+            queryset = self.get_queryset()
+            serializer = self.get_serializer(queryset, many=True)
+            return Response({"status": True, "log": serializer.data}, status=status.HTTP_200_OK)
+        except Exception as e:
+            print("⚠️Error in GetCommentsApiView:", e)
+            return Response({"status": False, "log": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+
+
+class DeleteCommentApiView(generics.DestroyAPIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_object(self):
+        comment_id = self.kwargs.get("comment_id")
+        try:
+            return FeedPostComment.objects.get(id=comment_id, user=self.request.user)
+        except FeedPostComment.DoesNotExist:
+            from rest_framework.exceptions import NotFound, PermissionDenied
+            if FeedPostComment.objects.filter(id=comment_id).exists():
+                raise PermissionDenied("You can only delete your own comments.")
+            raise NotFound("Comment not found.")
+
+    def destroy(self, request, *args, **kwargs):
+        try:
+            instance = self.get_object()
+            instance.delete()
+            return Response({"status": True, "log": "Comment deleted successfully"}, status=status.HTTP_200_OK)
+        except Exception as e:
+            print("⚠️Error in DeleteCommentApiView:", e)
+            return Response({"status": False, "log": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
