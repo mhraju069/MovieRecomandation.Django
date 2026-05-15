@@ -390,6 +390,10 @@ class MovieDetailView(views.APIView):
                     'review': i.review ,
                     "rating": i.rating,
                     'video': request.build_absolute_uri(i.video.url) if i.video else None,
+                    "review_id": i.id,
+                    'likes': i.liked.count(),
+                    'liked': i.liked.filter(id=request.user.id).exists(),
+                    'comments': RatingComment.objects.filter(rating=i).count(),
                     "created_at": i.created_at,
                 }
                 for i in reviews[:5]
@@ -433,7 +437,56 @@ class AddReviewAndRating(generics.GenericAPIView):
             print("⚠️Error in AddReviewAndRating:", e)
             return Response({"status": False, "log": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-    
+
+
+class AddRatingComment(generics.GenericAPIView):
+    permission_classes = [permissions.IsAuthenticated]
+    serializer_class = AddRatingCommentSerializer
+
+    def post(self, request):
+        try:
+            # Handle frontend sending review_id instead of rating_id
+            data = request.data.copy()
+            if "review_id" in data and "rating_id" not in data:
+                data["rating_id"] = data["review_id"]
+            elif "rating" in data and "rating_id" not in data:
+                data["rating_id"] = data["rating"]
+
+            serializer = self.get_serializer(data=data)
+            if serializer.is_valid():
+                serializer.save()
+                return Response({"status": True, "log": "Comment added successfully"}, status=status.HTTP_200_OK)
+            return Response({"status": False, "log": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            print("⚠️Error in AddRatingComment:", e)
+            return Response({"status": False, "log": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+
+class AddLikeToRating(generics.GenericAPIView):
+    permission_classes = [permissions.IsAuthenticated]
+    serializer_class = AddLikeToRatingSerializer
+
+    def post(self, request):
+        try:
+            data = request.data.copy()
+            if "review_id" in data and "rating_id" not in data:
+                data["rating_id"] = data["review_id"]
+            elif "rating" in data and "rating_id" not in data:
+                data["rating_id"] = data["rating"]
+
+            serializer = self.get_serializer(data=data)
+            if serializer.is_valid():
+                # The serializer returns liked=True when it removes the like (because it WAS liked)
+                # and liked=False when it adds the like (because it WAS NOT liked)
+                if serializer.validated_data.get("liked") == True:
+                    return Response({"status": True, "log": "Like removed successfully"}, status=status.HTTP_200_OK)
+                else:
+                    return Response({"status": True, "log": "Like added successfully"}, status=status.HTTP_200_OK)
+            return Response({"status": False, "log": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            print("⚠️Error in AddLikeToRating:", e)
+            return Response({"status": False, "log": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 
@@ -679,3 +732,5 @@ class DeleteCommentApiView(generics.DestroyAPIView):
         except Exception as e:
             print("⚠️Error in DeleteCommentApiView:", e)
             return Response({"status": False, "log": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+

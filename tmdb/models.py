@@ -26,12 +26,25 @@ class ReviewAndRating(models.Model):
     review = models.TextField(blank=True, null=True)
     video = models.FileField(upload_to='reviews', blank=True, null=True)
     rating = models.IntegerField(blank=True, null=True)
+    liked = models.ManyToManyField(settings.AUTH_USER_MODEL, related_name='liked_ratings',blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return f"Review and rating for: {self.user}"
 
+
+
+class RatingComment(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, related_name='rating_comment', on_delete=models.CASCADE)
+    rating = models.ForeignKey(ReviewAndRating, related_name='rating_comment', on_delete=models.CASCADE)
+    comment = models.TextField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"Rating comment for: {self.user}"
 
 
 

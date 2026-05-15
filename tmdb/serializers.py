@@ -126,3 +126,33 @@ class FeedPostCommentSerializer(serializers.ModelSerializer):
         fields = ['id', 'user', 'post_id', 'comment', 'created_at']
         read_only_fields = ['id', 'created_at']
 
+
+
+class AddRatingCommentSerializer(serializers.ModelSerializer):
+    user = serializers.HiddenField(default=serializers.CurrentUserDefault())
+    rating_id = serializers.UUIDField(required=True)
+    comment = serializers.CharField(required=True)
+    
+    class Meta:
+        model = RatingComment
+        fields = ['user', 'rating_id', 'comment']
+
+
+class AddLikeToRatingSerializer(serializers.Serializer):
+    user = serializers.HiddenField(default=serializers.CurrentUserDefault())
+    rating_id = serializers.UUIDField(required=True)
+
+    def validate(self, attrs):
+        rating_id = attrs.get("rating_id")
+        if not rating_id:
+            raise serializers.ValidationError("Rating ID is required")
+        review = ReviewAndRating.objects.filter(id=rating_id).first()
+        if review is None:
+            raise serializers.ValidationError("Rating ID is invalid")
+        if attrs["user"] in review.liked.all():
+            attrs["liked"] = True
+            review.liked.remove(attrs["user"])
+        else:
+            attrs["liked"] = False
+            review.liked.add(attrs["user"])
+        return attrs
