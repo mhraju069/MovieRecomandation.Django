@@ -619,6 +619,10 @@ class CommentPostApiView(generics.GenericAPIView):
 
     def post(self, request):
         try:
+            serializer = self.get_serializer(data=request.data)
+            if serializer.is_valid():
+                serializer.save()
+                return Response({"status": True, "log": "Comment added successfully"}, status=status.HTTP_200_OK)
             user = request.user
             post_id = request.data.get("post_id")
             comment = request.data.get("comment")
