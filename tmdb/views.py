@@ -105,7 +105,7 @@ class GetGenresView(generics.GenericAPIView):
                 for i in data
             ]
 
-            cache.set("tmdb_genres", response, timeout=7*86400)
+            cache.set("tmdb_genres", response, timeout=86400)
 
             return Response({"status": True, "log": self.get_serializer(response, many=True).data}, status=status.HTTP_200_OK)
 
@@ -162,7 +162,7 @@ class HomeApiView(views.APIView):
                     if genre_res.status_code == 200:
                         genres_data = genre_res.json().get("genres", [])
                         genres_cache = [{"genre_id": g.get("id"), "genre_name": g.get("name")} for g in genres_data]
-                        cache.set("tmdb_genres", genres_cache, timeout=7*86400)
+                        cache.set("tmdb_genres", genres_cache, timeout=86400)
                     else:
                         genres_cache = []
                 except Exception:
@@ -176,7 +176,7 @@ class HomeApiView(views.APIView):
                     "type": i.get("media_type"),
                     "title": i.get("title"),
                     "genre": [genre_map.get(g_id, g_id) for g_id in i.get("genre_ids", [])],
-                    "language": i.get("original_language"),
+                    "rating": self.get_overall_rating(i.get("id")),
                     "release_date": i.get("release_date"),
                     "poster_path": f"https://image.tmdb.org/t/p/original{i.get('poster_path')}",
                 }
@@ -262,7 +262,7 @@ class HomeApiView(views.APIView):
                 for i in selected
             ]
 
-            cache.set(f"tmdb_user_prefrences_{user.id}", response, timeout=3*86400)
+            cache.set(f"tmdb_user_prefrences_{user.id}", response, timeout=86400)
 
             return response
             
@@ -322,9 +322,9 @@ class HomeApiView(views.APIView):
             ]   
 
             if genre_id:
-                cache.set(f"tmdb_movies_by_genre_{genre_id}", response, timeout=3*86400)
+                cache.set(f"tmdb_movies_by_genre_{genre_id}", response, timeout=86400)
             else:
-                cache.set(f"tmdb_movies_by_genre", response, timeout=3*86400)
+                cache.set(f"tmdb_movies_by_genre", response, timeout=86400)
             
             return response
 
@@ -333,6 +333,9 @@ class HomeApiView(views.APIView):
             return None
 
 
+    def get_overall_rating(self, movie):
+        result = ReviewAndRating.objects.filter(movie_id=movie).aggregate(avg_rating=Avg('rating'))
+        return result.get('avg_rating') or 0.0
 
 
 class MovieDetailView(views.APIView):
@@ -369,7 +372,7 @@ class MovieDetailView(views.APIView):
                 "cast": {"profile" : [{"name": cast.get("name"), "profile_path": f"https://image.tmdb.org/t/p/original{cast.get('profile_path')}" if cast.get('profile_path') else None} for cast in movie.get("credits", {}).get("cast", [])][:10],"count" : len(movie.get("credits", {}).get("cast", []) + movie.get("credits", {}).get("crew", []))},
             }
 
-            cache.set(f"tmdb_movie_details_{movie_id}", response, timeout=360*86400)
+            cache.set(f"tmdb_movie_details_{movie_id}", response, timeout=86400)
 
             response["ratings"] = movie_rating
             return Response({"status": True, "log": response}, status=status.HTTP_200_OK)
@@ -625,7 +628,7 @@ class GetWatchlist(generics.GenericAPIView):
                             if not movie_details:
                                 movie_details = {}
                             movie_details["image"] = movie_data["image"]
-                            cache.set(cache_key, movie_details, timeout=86400 * 7)
+                            cache.set(cache_key, movie_details, timeout=86400)
                     except Exception as e:
                         print(f"Error fetching TMDB details for {mid}: {e}")
                 else:

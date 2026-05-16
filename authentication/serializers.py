@@ -4,19 +4,13 @@ from .helper import verify_otp,send_otp
 
 
 class SignUpSerializer(serializers.ModelSerializer):
-    confirm_password = serializers.CharField(write_only=True)
     
     class Meta:
         model = User
-        fields = ['email', 'name', 'password', 'confirm_password']
+        fields = ['email', 'name', 'password']
         extra_kwargs = {
             'password': {'write_only': True}
         }
-
-    def validate(self, attrs):
-        if attrs['password'] != attrs['confirm_password']:
-            raise serializers.ValidationError("Password fields do not match.")
-        return attrs
 
     def create(self, validated_data):
         user = User.objects.create_user(
@@ -122,16 +116,11 @@ class VerifyOtpSerializer(serializers.Serializer):
 
 class ResetPasswordSerializer(serializers.Serializer):
     new_password = serializers.CharField(write_only=True)
-    confirm_password = serializers.CharField(write_only=True)
 
     def validate(self, attrs):
         email = self.context['request'].user.email
         new_password = attrs.get('new_password')
-        confirm_password = attrs.get('confirm_password')
 
-        if new_password != confirm_password:
-            raise serializers.ValidationError({"status":False,"log":"Passwords do not match."})
-        
         try:
             user = User.objects.get(email=email)
         except User.DoesNotExist:
