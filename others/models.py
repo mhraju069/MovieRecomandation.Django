@@ -1,5 +1,6 @@
 from django.db import models
 import uuid
+from django.conf import settings
 
 
 class FAQ(models.Model):
@@ -70,3 +71,6 @@ class TermsAndConditionsContent(models.Model):
 
     def __str__(self):
         return f"Content for {self.terms}"
+    
+
+

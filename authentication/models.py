@@ -43,6 +43,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     bio = models.TextField(blank=True, null=True,verbose_name="Bio")
     image = models.ImageField(upload_to='profile_images/', blank=True, null=True,)
     role = models.CharField(max_length=10, choices=ROLE, default='user',verbose_name="User Role")
+    notify = models.BooleanField(default=True,verbose_name="Notification Preference")
     is_active = models.BooleanField(default=False,verbose_name="Active User")
     is_staff = models.BooleanField(default=False,verbose_name="Staff User")
     is_superuser = models.BooleanField(default=False,verbose_name="Super User")

@@ -87,7 +87,7 @@ class FeedPostComment(models.Model):
 
 class Watchlist(models.Model):
     user = models.OneToOneField(settings.AUTH_USER_MODEL, related_name='watchlist', on_delete=models.CASCADE)
-    movie_ids = models.JSONField(blank=True, null=True,default=list)
+    movie_ids = models.JSONField(blank=True, null=True, default=dict)
 
     def __str__(self):
         return f"Watchlist for: {self.user}"

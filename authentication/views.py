@@ -13,6 +13,11 @@ from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
 from rest_framework import generics, status,permissions
 from rest_framework_simplejwt.tokens import RefreshToken
+from django.contrib.auth.hashers import make_password
+from django.contrib.auth import get_user_model
+from django.core.files.base import ContentFile
+from django.utils.text import slugify
+from firebase_admin import auth as firebase_auth
 
 # Create your views here.
 
@@ -266,3 +271,61 @@ class FriendSuggestionsView(APIView):
 
         suggestions = [UserProfileSerializer(u,context={"request":request}).data for u in suggested_users]
         return Response({"status": True, "log": suggestions}, status=200)
+
+
+
+
+class FirebaseLoginView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        id_token = request.data.get('token')
+
+        if not id_token:
+            return Response({'status': False,'log': 'Token is required'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            decoded_token = firebase_auth.verify_id_token(id_token)
+        except Exception as e:
+            return Response({'status': False,'log': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        
+        uid = decoded_token.get('uid')
+        email = decoded_token.get('email')
+        
+        if not email:
+            return Response({'status': False,'log': 'Email not provided by Firebase'}, status=status.HTTP_400_BAD_REQUEST)
+            
+        name = decoded_token.get('name')
+        profile_image_url = decoded_token.get('picture')
+
+        user, created = User.objects.get_or_create(
+            email=email,
+            defaults={
+                'name': name,
+                'is_active': True,
+                'password': make_password(None),
+            },
+        )
+        if created and profile_image_url:
+            img_response = requests.get(profile_image_url)
+            if img_response.status_code == 200:
+                file_name = f"{slugify(name or email.split('@')[0])}-profile.jpg"
+                user.image.save(
+                    file_name,
+                    ContentFile(img_response.content),
+                    save=True,
+                )
+
+            print(UserProfileSerializer(user, context={'request': request}).data)
+
+        if user:
+            token = RefreshToken.for_user(user)
+            return Response({
+                'access': str(token.access_token),
+                'refresh': str(token),
+                'log': UserProfileSerializer(user, context={'request': request}).data,
+                'status': True,
+                'active': user.is_active,
+            }, status=status.HTTP_200_OK)
+        else:
+            return Response({'status': False,'log': 'Invalid or expired token'}, status=status.HTTP_400_BAD_REQUEST)

@@ -1,4 +1,5 @@
 import json
+from datetime import date, timedelta
 from .utils import *
 from .models import *
 import requests,random
@@ -120,15 +121,19 @@ class HomeApiView(views.APIView):
 
     def get(self, request):
         try:
+            show_param = request.query_params.get("show", None)
+            media_type = "tv" if show_param and str(show_param).strip().lower() not in ("0", "false", "no", "off") else "movie"
 
-            res_today_trending = self.get_tonight_trending_movies()
-            res_user_prefrences = self.get_user_prefrences(request.user)
-            res_movies_by_genre = self.get_movies_by_genre(request.query_params.get("genre", None))
+            res_today_trending = self.get_tonight_trending_movies(media_type)
+            res_user_prefrences = self.get_user_prefrences(request.user, media_type)
+            res_movies_by_genre = self.get_movies_by_genre(request.query_params.get("genre", None), request.query_params.get("platform", None), media_type)
+            res_movies_by_platform = self.get_movies_by_platform(request.query_params.get("platform", None), media_type)
 
             response = {
                 "trending_tonight":res_today_trending,
                 "user_prefrences":res_user_prefrences,
-                "movies_by_genre":res_movies_by_genre
+                "movies_by_genre":res_movies_by_genre,
+                "movies_by_platform":res_movies_by_platform
             }
             
             return Response({"status": True, "log": response}, status=status.HTTP_200_OK)
@@ -138,9 +143,27 @@ class HomeApiView(views.APIView):
 
 
 
-    def get_tonight_trending_movies(self):
+    def _get_genre_map(self, media_type="movie"):
+        cache_key = f"tmdb_genres_{media_type}"
+        genres_cache = cache.get(cache_key)
+        if genres_cache is not None:
+            return {g["genre_id"]: g["genre_name"] for g in genres_cache}
 
-        cached_data = cache.get("tmdb_tonight_trending_movies")
+        try:
+            endpoint = "https://api.themoviedb.org/3/genre/tv/list" if media_type == "tv" else "https://api.themoviedb.org/3/genre/movie/list"
+            genre_res = requests.get(endpoint, headers=tmdb_token())
+            genre_res.raise_for_status()
+            genres_data = genre_res.json().get("genres", [])
+            genres_cache = [{"genre_id": g.get("id"), "genre_name": g.get("name")} for g in genres_data]
+            cache.set(cache_key, genres_cache, timeout=86400)
+            return {g["genre_id"]: g["genre_name"] for g in genres_cache}
+        except Exception:
+            return {}
+
+    def get_tonight_trending_movies(self, media_type="movie"):
+
+        cache_key = f"tmdb_tonight_trending_{media_type}"
+        cached_data = cache.get(cache_key)
         if cached_data:
             print("Using cached data")
             return cached_data
@@ -148,42 +171,29 @@ class HomeApiView(views.APIView):
         print("Using fresh data")
         try:
             res = requests.get(
-                "https://api.themoviedb.org/3/trending/movie/day",
+                f"https://api.themoviedb.org/3/trending/{media_type}/day",
                 headers=tmdb_token()
             )
             res.raise_for_status()
             data = res.json().get("results", [])
-            
-            # Get genres from cache or fetch them
-            genres_cache = cache.get("tmdb_genres")
-            if not genres_cache:
-                try:
-                    genre_res = requests.get("https://api.themoviedb.org/3/genre/movie/list", headers=tmdb_token())
-                    if genre_res.status_code == 200:
-                        genres_data = genre_res.json().get("genres", [])
-                        genres_cache = [{"genre_id": g.get("id"), "genre_name": g.get("name")} for g in genres_data]
-                        cache.set("tmdb_genres", genres_cache, timeout=86400)
-                    else:
-                        genres_cache = []
-                except Exception:
-                    genres_cache = []
-                    
-            genre_map = {g["genre_id"]: g["genre_name"] for g in genres_cache}
+
+            genre_map = self._get_genre_map(media_type)
 
             response = [
                 {
+                    "rank": index + 1,
                     "id": i.get("id"),
-                    "type": i.get("media_type"),
-                    "title": i.get("title"),
+                    "type": i.get("media_type") or media_type,
+                    "title": i.get("title") if media_type == "movie" else i.get("name"),
                     "genre": [genre_map.get(g_id, g_id) for g_id in i.get("genre_ids", [])],
                     "rating": self.get_overall_rating(i.get("id")),
-                    "release_date": i.get("release_date"),
-                    "poster_path": f"https://image.tmdb.org/t/p/original{i.get('poster_path')}",
+                    "release_date": i.get("release_date") if media_type == "movie" else i.get("first_air_date"),
+                    "poster_path": f"https://image.tmdb.org/t/p/original{i.get('poster_path')}" if i.get('poster_path') else None,
                 }
-                for i in data[:20]
+                for index, i in enumerate(data[:20])
             ]
 
-            cache.set("tmdb_tonight_trending_movies", response, timeout=43200)
+            cache.set(cache_key, response, timeout=43200)
 
             return response
         except Exception as e:
@@ -191,9 +201,10 @@ class HomeApiView(views.APIView):
             return None
     
 
-    def get_user_prefrences(self, user):
+    def get_user_prefrences(self, user, media_type="movie"):
 
-        cached_data = cache.get(f"tmdb_user_prefrences_{user.id}")
+        cache_key = f"tmdb_user_prefrences_{user.id}_{media_type}"
+        cached_data = cache.get(cache_key)
         if cached_data:
             print("Using cached data")
             return cached_data
@@ -210,20 +221,14 @@ class HomeApiView(views.APIView):
                 if prefrence.genre:
                     genre_ids.extend([g.get("id") for g in prefrence.genre])
 
-            access_token = getattr(settings, 'TMDB_ACCESS_TOKEN', None)
-            if not access_token:
+            headers = tmdb_token()
+            if not headers:
                 return None
-                
-            headers = {
-                "Authorization": f"Bearer {access_token}"
-            }
-            
-            # Remove duplicates
+
             platform_ids = list(set(platform_ids))
             genre_ids = list(set(genre_ids))
-            
-            # Build API URL
-            url = "https://api.themoviedb.org/3/discover/movie?sort_by=popularity.desc"
+            sort_field = "release_date.desc" if media_type == "movie" else "first_air_date.desc"
+            url = f"https://api.themoviedb.org/3/discover/{media_type}?sort_by={sort_field}&page=1"
             if platform_ids:
                 url += f"&with_watch_providers={'|'.join(map(str, platform_ids))}&watch_region=US"
             if genre_ids:
@@ -235,34 +240,27 @@ class HomeApiView(views.APIView):
 
             if not movies:
                 return []
-            
-            # Unique weighted random selection based on popularity
-            selected = []
-            k = min(10, len(movies))
-            for _ in range(k):
-                weights = [m.get("popularity", 1.0) for m in movies]
-                choice = random.choices(movies, weights=weights, k=1)[0]
-                selected.append(choice)
-                movies.remove(choice)
 
-            # Map genre IDs to names
-            genres_cache = cache.get("tmdb_genres") or []
-            genre_map = {g["genre_id"]: g["genre_name"] for g in genres_cache}
-            
+            genre_map = self._get_genre_map(media_type)
             response = [
-                {
+                {   "rank": index+1,
                     "id": i.get("id"),
-                    "type": i.get("media_type", "movie"),
-                    "title": i.get("title"),
+                    "type": i.get("media_type", media_type),
+                    "title": i.get("title") if media_type == "movie" else i.get("name"),
                     "genre": [genre_map.get(g_id, g_id) for g_id in i.get("genre_ids", [])],
                     "language": i.get("original_language"),
-                    "release_date": i.get("release_date"),
+                    "release_date": i.get("release_date") if media_type == "movie" else i.get("first_air_date"),
                     "poster_path": f"https://image.tmdb.org/t/p/original{i.get('poster_path')}" if i.get('poster_path') else None,
+                    "popularity": i.get("popularity", 0.0),
                 }
-                for i in selected
+                for index, i in enumerate(movies)
             ]
 
-            cache.set(f"tmdb_user_prefrences_{user.id}", response, timeout=86400)
+            response.sort(key=lambda item: item.get("popularity", 0.0), reverse=True)
+            for index, item in enumerate(response, start=1):
+                item["rank"] = index
+
+            cache.set(cache_key, response, timeout=86400)
 
             return response
             
@@ -271,22 +269,26 @@ class HomeApiView(views.APIView):
             return None
 
 
-    def get_movies_by_genre(self, genre_id=None):
-        if genre_id:
-            cached_data = cache.get(f"tmdb_movies_by_genre_{genre_id}")
+    def get_movies_by_genre(self, genre_id=None, platform_id=None, media_type="movie"):
+        # Build cache key
+        if genre_id or platform_id:
+            cache_key = f"tmdb_movies_by_genre_{media_type}_{genre_id}_{platform_id}"
         else:
-            cached_data = cache.get(f"tmdb_movies_by_genre")
-
+            cache_key = f"tmdb_movies_by_genre_{media_type}"
+            
+        cached_data = cache.get(cache_key)
         if cached_data:
             print("Using cached data")
             return cached_data
 
         print("Using fresh data")
         try:
+            sort_field = "release_date.desc" if media_type == "movie" else "first_air_date.desc"
+            url = f"https://api.themoviedb.org/3/discover/{media_type}?sort_by={sort_field}"
             if genre_id:
-                url = f"https://api.themoviedb.org/3/discover/movie?sort_by=popularity.desc&with_genres={genre_id}"
-            else:
-                url = f"https://api.themoviedb.org/3/discover/movie?sort_by=popularity.desc"
+                url += f"&with_genres={genre_id}"
+            if platform_id:
+                url += f"&with_watch_providers={platform_id}&watch_region=US"
             
             res = requests.get(url, headers=tmdb_token())
             res.raise_for_status()
@@ -295,36 +297,23 @@ class HomeApiView(views.APIView):
             if not movies:
                 return []
                 
-            # Unique weighted random selection based on popularity
-            selected = []
-            k = min(10, len(movies))
-            for _ in range(k):
-                weights = [m.get("popularity", 1.0) for m in movies]
-                choice = random.choices(movies, weights=weights, k=1)[0]
-                selected.append(choice)
-                movies.remove(choice)
-
-            # Map genre IDs to names
-            genres_cache = cache.get("tmdb_genres") or []
-            genre_map = {g["genre_id"]: g["genre_name"] for g in genres_cache}
+            genre_map = self._get_genre_map(media_type)
 
             response = [
-                {
+                {   "rank" : index + 1,
                     "id": i.get("id"),
-                    "type": i.get("media_type", "movie"),
-                    "title": i.get("title"),
+                    "type": i.get("media_type", media_type),
+                    "title": i.get("title") if media_type == "movie" else i.get("name"),
                     "genre": [genre_map.get(g_id, g_id) for g_id in i.get("genre_ids", [])],
                     "language": i.get("original_language"),
-                    "release_date": i.get("release_date"),
+                    "release_date": i.get("release_date") if media_type == "movie" else i.get("first_air_date"),
                     "poster_path": f"https://image.tmdb.org/t/p/original{i.get('poster_path')}" if i.get('poster_path') else None,
+                    "popularity": i.get("popularity", 0.0),
                 }
-                for i in selected
+                for index, i in enumerate(movies)
             ]   
 
-            if genre_id:
-                cache.set(f"tmdb_movies_by_genre_{genre_id}", response, timeout=86400)
-            else:
-                cache.set(f"tmdb_movies_by_genre", response, timeout=86400)
+            cache.set(cache_key, response, timeout=86400)
             
             return response
 
@@ -333,60 +322,206 @@ class HomeApiView(views.APIView):
             return None
 
 
+    def get_movies_by_platform(self, platform_id, media_type="movie"):
+        try:
+            if not platform_id:
+                return []
+
+            if isinstance(platform_id, list):
+                platform_list = [str(x).strip() for x in platform_id if str(x).strip()]
+            elif isinstance(platform_id, str):
+                if ',' in platform_id:
+                    platform_list = [x.strip() for x in platform_id.split(',') if x.strip()]
+                elif '|' in platform_id:
+                    platform_list = [x.strip() for x in platform_id.split('|') if x.strip()]
+                else:
+                    platform_list = [platform_id.strip()]
+            else:
+                platform_list = [str(platform_id).strip()]
+
+            platform_list = sorted(list(set(platform_list)))
+            
+            if not platform_list:
+                return []
+
+            cached_platforms_data = {}
+            uncached_platforms = []
+            for pid in platform_list:
+                single_cache_key = f"tmdb_movies_by_platform_{media_type}_{pid}"
+                cached_movies = cache.get(single_cache_key)
+                if cached_movies:
+                    cached_platforms_data[pid] = cached_movies
+                else:
+                    uncached_platforms.append(pid)
+
+            combined_movies_dict = {}
+            for pid, cached_movies in cached_platforms_data.items():
+                for movie in cached_movies:
+                    m_id = movie.get("id")
+                    if m_id not in combined_movies_dict or movie.get("popularity", 1.0) > combined_movies_dict[m_id].get("popularity", 1.0):
+                        combined_movies_dict[m_id] = movie
+
+            headers = tmdb_token()
+            if not headers:
+                return None
+
+            genre_map = self._get_genre_map(media_type)
+
+            for pid in platform_list:
+                single_cache_key = f"tmdb_movies_by_platform_{media_type}_{pid}"
+                try:
+                    sort_field = "release_date.desc" if media_type == "movie" else "first_air_date.desc"
+                    res = requests.get(
+                        f"https://api.themoviedb.org/3/discover/{media_type}?sort_by={sort_field}&with_watch_providers={pid}&watch_region=US",
+                        headers=headers
+                    )
+                    res.raise_for_status()
+                    movies = res.json().get("results", [])
+                    
+                    if movies:
+                        cached_movies = [
+                            {   "rank": index + 1,
+                                "id": i.get("id"),
+                                "type": i.get("media_type", media_type),
+                                "title": i.get("title") if media_type == "movie" else i.get("name"),
+                                "genre": [genre_map.get(g_id, g_id) for g_id in i.get("genre_ids", [])],
+                                "language": i.get("original_language"),
+                                "release_date": i.get("release_date") if media_type == "movie" else i.get("first_air_date"),
+                                "poster_path": f"https://image.tmdb.org/t/p/original{i.get('poster_path')}" if i.get('poster_path') else None,
+                                "popularity": i.get("popularity", 1.0),
+                            }
+                            for index, i in enumerate(movies)
+                        ]
+                        cache.set(single_cache_key, cached_movies, timeout=86400)
+                    else:
+                        cached_movies = []
+                        cache.set(single_cache_key, cached_movies, timeout=3600)
+                except Exception as e:
+                    print(f"⚠️Error fetching platform {pid} from TMDB:", e)
+                    cached_movies = []
+
+                for movie in cached_movies:
+                    m_id = movie.get("id")
+                    if m_id not in combined_movies_dict or movie.get("popularity", 1.0) > combined_movies_dict[m_id].get("popularity", 1.0):
+                        combined_movies_dict[m_id] = movie
+
+            combined_movies = list(combined_movies_dict.values())
+            if not combined_movies:
+                return []
+
+            combined_movies.sort(key=lambda m: m.get("release_date") or m.get("first_air_date") or "", reverse=True)
+            for index, movie in enumerate(combined_movies, start=1):
+                movie["rank"] = index
+            return combined_movies
+
+        except Exception as e:
+            print("⚠️Error in get_movies_by_platform:", e)
+            return None
+
+
     def get_overall_rating(self, movie):
         result = ReviewAndRating.objects.filter(movie_id=movie).aggregate(avg_rating=Avg('rating'))
         return result.get('avg_rating') or 0.0
 
 
+
+
 class MovieDetailView(views.APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
     def get(self, request, movie_id):
-        movie_rating = self.GetRating(request, movie_id)
-        
-        cached_data = cache.get(f"tmdb_movie_details_{movie_id}")
-        if cached_data:
-            print("Using cached data")
-            cached_data["ratings"] = movie_rating
-            return Response({"status": True, "log": cached_data}, status=status.HTTP_200_OK)
+        media_types = ["movie", "tv"]
+
+        for media_type in media_types:
+            cache_key = f"tmdb_media_details_{media_type}_{movie_id}"
+            cached_data = cache.get(cache_key)
+            if cached_data:
+                print("Using cached data")
+                cached_data = cached_data.copy()
+                cached_data["ratings"] = self.GetRating(request, movie_id, media_type)
+                cached_data["in_watchlist"] = self.check_watchlist(request.user, movie_id)
+                return Response({"status": True, "log": cached_data}, status=status.HTTP_200_OK)
+
+            print(f"Using fresh data for {media_type}")
+            try:
+                res = requests.get(
+                    f"https://api.themoviedb.org/3/{media_type}/{movie_id}?append_to_response=videos,images,credits,watch/providers",
+                    headers=tmdb_token()
+                )
+                res.raise_for_status()
+                movie = res.json()
+
+                provider_results = movie.get("watch/providers", {}).get("results", {}) or {}
+                provider_map = {}
+                for region_data in provider_results.values():
+                    for section in ["flatrate", "rent", "buy", "ads"]:
+                        for prov in region_data.get(section, []) or []:
+                            if not prov:
+                                continue
+                            provider_id = prov.get("provider_id")
+                            if provider_id and provider_id not in provider_map:
+                                provider_map[provider_id] = {
+                                    "provider_name": prov.get("provider_name"),
+                                    "logo_path": f"https://image.tmdb.org/t/p/original{prov.get('logo_path')}" if prov.get('logo_path') else None,
+                                    "type": section,
+                                }
+
+                response = {
+                    "type": media_type,
+                    "title": movie.get("title") if media_type == "movie" else movie.get("name"),
+                    "genre": [g.get("name") for g in movie.get("genres", [])],
+                    "language": movie.get("original_language"),
+                    "release_date": movie.get("release_date") if media_type == "movie" else movie.get("first_air_date"),
+                    "poster_path": f"https://image.tmdb.org/t/p/original{movie.get('poster_path')}" if movie.get('poster_path') else None,
+                    "backdrop_path": f"https://image.tmdb.org/t/p/original{movie.get('backdrop_path')}" if movie.get('backdrop_path') else None,
+                    "runtime": movie.get("runtime") if media_type == "movie" else (movie.get("episode_run_time") or [None])[0],
+                    "available_on": list(provider_map.values()),
+                    "budget": movie.get("budget") if media_type == "movie" else None,
+                    "in_watchlist": self.check_watchlist(request.user, movie_id),
+                    "overview": movie.get("overview"),
+                    "trailer": [
+                        f"https://www.youtube.com/watch?v={vid.get('key')}"
+                        for vid in movie.get("videos", {}).get("results", [])
+                        if vid.get("type") == "Trailer"
+                    ] or None,
+                    "producer": [
+                        crew.get("name")
+                        for crew in movie.get("credits", {}).get("crew", [])
+                        if crew.get("job") == "Producer"
+                    ] or "Unknown",
+                    "director": [
+                        crew.get("name")
+                        for crew in movie.get("credits", {}).get("crew", [])
+                        if crew.get("job") == "Director"
+                    ] or "Unknown",
+                    "cast": {
+                        "profile": [
+                            {
+                                "name": cast.get("name"),
+                                "profile_path": f"https://image.tmdb.org/t/p/original{cast.get('profile_path')}" if cast.get('profile_path') else None,
+                            }
+                            for cast in movie.get("credits", {}).get("cast", [])
+                        ][:10],
+                        "count": len(movie.get("credits", {}).get("cast", []) + movie.get("credits", {}).get("crew", [])),
+                    },
+                }
+
+                cached_response = response.copy()
+                cached_response.pop("in_watchlist", None)
+                cache.set(cache_key, cached_response, timeout=86400)
+
+                response["ratings"] = self.GetRating(request, movie_id, media_type)
+                return Response({"status": True, "log": response}, status=status.HTTP_200_OK)
+            except Exception as e:
+                print(f"⚠️Error in MovieDetailView for {media_type}:", e)
+                continue
+
+        return Response({"status": False, "log": "Media not found."}, status=status.HTTP_404_NOT_FOUND)
 
 
-        print("Using fresh data")
+    def GetRating(self, request, movie_id, media_type='movie'):
         try:
-            res = requests.get(f"https://api.themoviedb.org/3/movie/{movie_id}?append_to_response=videos,images,credits", headers=tmdb_token())
-            res.raise_for_status()
-            movie = res.json()
-
-            response = {
-                "type": movie.get("media_type", "movie"),
-                "title": movie.get("title"),
-                "genre": [g.get("name") for g in movie.get("genres", [])],
-                "language": movie.get("original_language"),
-                "release_date": movie.get("release_date"),
-                "poster_path": f"https://image.tmdb.org/t/p/original{movie.get('poster_path')}" if movie.get('poster_path') else None,
-                "backdrop_path": f"https://image.tmdb.org/t/p/original{movie.get('backdrop_path')}" if movie.get('backdrop_path') else None,
-                "runtime": movie.get("runtime"),
-                "budget": movie.get("budget"),
-                "overview": movie.get("overview"),
-                "trailer":[f"https://www.youtube.com/watch?v={vid.get('key')}" for vid in movie.get("videos", {}).get("results", []) if vid.get("type") == "Trailer"] or None,
-                "producer": [crew.get("name") for crew in movie.get("credits", {}).get("crew", []) if crew.get("job") == "Producer"] or "Unknown",
-                "director": [crew.get("name") for crew in movie.get("credits", {}).get("crew", []) if crew.get("job") == "Director"] or "Unknown",
-                "cast": {"profile" : [{"name": cast.get("name"), "profile_path": f"https://image.tmdb.org/t/p/original{cast.get('profile_path')}" if cast.get('profile_path') else None} for cast in movie.get("credits", {}).get("cast", [])][:10],"count" : len(movie.get("credits", {}).get("cast", []) + movie.get("credits", {}).get("crew", []))},
-            }
-
-            cache.set(f"tmdb_movie_details_{movie_id}", response, timeout=86400)
-
-            response["ratings"] = movie_rating
-            return Response({"status": True, "log": response}, status=status.HTTP_200_OK)
-
-        except Exception as e:
-            print("⚠️Error in MovieDetailView:", e)
-            return Response({"status": False, "log": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-        
-
-
-    def GetRating(self, request, movie_id):
-        try:
-            reviews = ReviewAndRating.objects.filter(movie_id=movie_id).exclude(rating__isnull=True)
+            reviews = ReviewAndRating.objects.filter(movie_id=movie_id, type=media_type).exclude(rating__isnull=True)
             response = [
                 {
                     'user': i.user.name or i.user.email[:i.user.email.index('@')].title(),
@@ -405,6 +540,27 @@ class MovieDetailView(views.APIView):
         except Exception as e:
             print("⚠️Error in GetRating:", e)
             return None
+
+
+    def check_watchlist(self, user, movie_id):
+        try:
+            movie_id = int(movie_id)
+            watchlist = Watchlist.objects.filter(user=user).first()
+            if not watchlist:
+                return False
+
+            movie_ids = watchlist.movie_ids or {}
+            if isinstance(movie_ids, list):
+                return movie_id in [int(mid) for mid in movie_ids if str(mid).isdigit()]
+
+            if isinstance(movie_ids, dict):
+                for ids in movie_ids.values():
+                    if isinstance(ids, list) and movie_id in [int(mid) for mid in ids if str(mid).isdigit()]:
+                        return True
+            return False
+        except Exception as e:
+            print("⚠️Error in check_watchlist:", e)
+            return False
 
 
 
@@ -442,6 +598,7 @@ class AddReviewAndRating(generics.GenericAPIView):
 
 
 
+
 class AddRatingComment(generics.GenericAPIView):
     permission_classes = [permissions.IsAuthenticated]
     serializer_class = AddRatingCommentSerializer
@@ -463,6 +620,8 @@ class AddRatingComment(generics.GenericAPIView):
         except Exception as e:
             print("⚠️Error in AddRatingComment:", e)
             return Response({"status": False, "log": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
 
 
 
@@ -490,6 +649,8 @@ class AddLikeToRating(generics.GenericAPIView):
         except Exception as e:
             print("⚠️Error in AddLikeToRating:", e)
             return Response({"status": False, "log": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
 
 
 
@@ -546,12 +707,22 @@ class AddWatchlist(generics.GenericAPIView):
     def post(self, request, action):
         try:
             user = request.user
-            movie_id = request.data.get("movie_id")
-            item_type = request.data.get("type", "movie")
+            action = action.lower()
+            if action not in ["add", "remove"]:
+                return Response({"status": False, "log": "Invalid action"}, status=status.HTTP_400_BAD_REQUEST)
+
+            serializer = self.get_serializer(data=request.data)
+            if not serializer.is_valid():
+                return Response({"status": False, "log": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+
+            movie_id = serializer.validated_data.get("movie_id")
+            item_type = serializer.validated_data.get("type", "movie").lower()
 
             watchlist, _ = Watchlist.objects.get_or_create(user=user)
             
-            if not isinstance(watchlist.movie_ids, dict):
+            if isinstance(watchlist.movie_ids, list):
+                watchlist.movie_ids = {"movie": watchlist.movie_ids}
+            elif not isinstance(watchlist.movie_ids, dict):
                 watchlist.movie_ids = {}
             
             if action == "add":
@@ -564,7 +735,7 @@ class AddWatchlist(generics.GenericAPIView):
                     if movie_id in watchlist.movie_ids[item_type]:
                         watchlist.movie_ids[item_type].remove(movie_id)
             
-            watchlist.save()
+            watchlist.save(update_fields=["movie_ids"])
             return Response({"status": True, "log": "Watchlist updated successfully"}, status=status.HTTP_200_OK)
         except Exception as e:
             print("⚠️Error in AddWatchlist:", e)
@@ -582,8 +753,12 @@ class GetWatchlist(generics.GenericAPIView):
             item_type = request.query_params.get('type', 'all')
             watchlist, _ = Watchlist.objects.get_or_create(user=user)
 
-            if not isinstance(watchlist.movie_ids, dict):
+            if isinstance(watchlist.movie_ids, list):
+                watchlist.movie_ids = {"movie": watchlist.movie_ids}
+                watchlist.save(update_fields=["movie_ids"])
+            elif not isinstance(watchlist.movie_ids, dict):
                 watchlist.movie_ids = {}
+                watchlist.save(update_fields=["movie_ids"])
 
             id_and_type = []
             if item_type == "all":
@@ -737,3 +912,94 @@ class DeleteCommentApiView(generics.DestroyAPIView):
             return Response({"status": False, "log": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+
+
+class GetReviewCommentsApiView(generics.GenericAPIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request,review_id):
+        try:
+            comments = RatingComment.objects.filter(rating__id=review_id).select_related('user').order_by('created_at')
+            response = [
+                {
+                    'id': comment.id,
+                    'user': {
+                        'id': comment.user.id,
+                        'name': comment.user.name or comment.user.email[:comment.user.email.index('@')].title(),
+                        'image': comment.user.image.url if comment.user.image else None,
+                    },
+                    'comment': comment.comment,
+                    "created_at": comment.created_at,
+                }
+                for comment in comments
+            ]
+            return Response({"status": True, "log": response}, status=status.HTTP_200_OK)
+        except Exception as e:
+            print("⚠️Error in GetReviewCommentsApiView:", e)
+            return Response({"status": False, "log": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+
+
+class SearchMovieView(generics.GenericAPIView):
+    permission_classes = [permissions.IsAuthenticated]
+    serializer_class = SearchMovieSerializer
+
+
+    def get(self, request):
+        try:
+            serializer = self.serializer_class(data=request.query_params)
+            if not serializer.is_valid():
+                return Response({"status": False, "log": "Keyword is required for searching"}, status=status.HTTP_400_BAD_REQUEST)
+            
+            keyword = serializer.validated_data.get("keyword")
+            
+            headers = tmdb_token()
+            if not headers:
+                return Response({"status": False, "log": "TMDB access token not configured."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            
+            res = requests.get(
+                "https://api.themoviedb.org/3/search/movie",
+                params={"query": keyword},
+                headers=headers
+            )
+            res.raise_for_status()
+            data = res.json().get("results", [])
+            
+            # Get genres from cache or fetch them
+            genres_cache = cache.get("tmdb_genres")
+            if not genres_cache:
+                try:
+                    genre_res = requests.get("https://api.themoviedb.org/3/genre/movie/list", headers=headers)
+                    if genre_res.status_code == 200:
+                        genres_data = genre_res.json().get("genres", [])
+                        genres_cache = [{"genre_id": g.get("id"), "genre_name": g.get("name")} for g in genres_data]
+                        cache.set("tmdb_genres", genres_cache, timeout=86400)
+                    else:
+                        genres_cache = []
+                except Exception:
+                    genres_cache = []
+            
+            genre_map = {g["genre_id"]: g["genre_name"] for g in genres_cache}
+            
+            response = [
+                {
+                    "id": i.get("id"),
+                    "type": i.get("media_type", "movie"),
+                    "title": i.get("title"),
+                    "genre": [genre_map.get(g_id, g_id) for g_id in i.get("genre_ids", [])],
+                    "rating": self.get_overall_rating(i.get("id")),
+                    "release_date": i.get("release_date"),
+                    "poster_path": f"https://image.tmdb.org/t/p/original{i.get('poster_path')}" if i.get('poster_path') else None,
+                }
+                for i in data
+            ]
+            
+            return Response({"status": True, "log": response}, status=status.HTTP_200_OK)
+        except Exception as e:
+            print("⚠️Error in SearchMovieView:", e)
+            return Response({"status": False, "log": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    def get_overall_rating(self, movie_id):
+        result = ReviewAndRating.objects.filter(movie_id=movie_id).aggregate(avg_rating=Avg('rating'))
+        return result.get('avg_rating') or 0.0

@@ -1,13 +1,20 @@
 from .serializers import *
-from .models import FAQ, Support
+from .models import *
 from rest_framework import generics
 from django.shortcuts import render
 from rest_framework.exceptions import NotFound
+from rest_framework import views, permissions, status
+from rest_framework.response import Response
+from tmdb.models import UserPrefrences
+from tmdb.utils import tmdb_token
+from datetime import date, timedelta
+import requests
 
 
 class FAQView(generics.ListAPIView):
     queryset = FAQ.objects.filter(is_active=True)
     serializer_class = FAQSerializer
+
 
 
 class SupportView(generics.RetrieveAPIView):
@@ -21,6 +28,7 @@ class SupportView(generics.RetrieveAPIView):
         return obj
         
 
+
 class PrivacyPolicyView(generics.RetrieveAPIView):
     queryset = PrivacyPolicy.objects.all()
     serializer_class = PrivacyPolicySerializer
@@ -32,6 +40,7 @@ class PrivacyPolicyView(generics.RetrieveAPIView):
         return obj
 
 
+
 class TermsAndConditionsView(generics.RetrieveAPIView):
     queryset = TermsAndConditions.objects.all()
     serializer_class = TermsAndConditionsSerializer
@@ -41,3 +50,4 @@ class TermsAndConditionsView(generics.RetrieveAPIView):
         if not obj:
             raise NotFound("Terms and conditions not found.")
         return obj
+

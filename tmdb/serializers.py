@@ -92,7 +92,7 @@ class FeedPostsSerializer(serializers.Serializer):
 
 class WatchlistSerializer(serializers.ModelSerializer):
     user = serializers.HiddenField(default=serializers.CurrentUserDefault())
-    type = serializers.CharField(required=True)
+    type = serializers.CharField(required=False, default="movie")
     movie_id = serializers.IntegerField(required=True)
     
     class Meta:
@@ -156,3 +156,9 @@ class AddLikeToRatingSerializer(serializers.Serializer):
             attrs["liked"] = False
             review.liked.add(attrs["user"])
         return attrs
+
+
+
+class SearchMovieSerializer(serializers.Serializer):
+    keyword = serializers.CharField(required=True)
+    

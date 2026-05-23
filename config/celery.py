@@ -1,5 +1,6 @@
 import os
 from celery import Celery
+from celery.schedules import crontab
 
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
 
@@ -7,6 +8,13 @@ app = Celery('config')
 
 app.config_from_object('django.conf:settings', namespace='CELERY')
 app.autodiscover_tasks()
+
+app.conf.beat_schedule = {
+    'tmdb_new_release_notifications_every_hour': {
+        'task': 'others.tasks.send_new_release_notifications',
+        'schedule': crontab(minute=0, hour='*'),
+    },
+}
 
 
 @app.task(bind=True)

@@ -3,13 +3,13 @@ services:
     build: .
     container_name: web-p
     command: >
-      sh -c "python manage.py collectstatic --noinput && python manage.py makemigrations && python manage.py migrate && gunicorn config.asgi:application -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000 --workers 4"
+      sh -c "python manage.py collectstatic --noinput && python manage.py makemigrations && python manage.py migrate && gunicorn config.asgi:application -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000 --workers 4 --forwarded-allow-ips='*'"
     volumes:
       - .:/app
     expose:
       - "8000"
     depends_on:
-      - redis 
+      - redis
       # - db
     environment:
       - DJANGO_SETTINGS_MODULE=config.settings
@@ -20,7 +20,7 @@ services:
     image: nginx:stable
     container_name: nginx-p
     ports:
-      - "8000:80"
+      - "8080:80"
       # - "443:443"
     volumes:
       - ./nginx.conf:/etc/nginx/conf.d/default.conf
@@ -52,37 +52,34 @@ services:
       - "6378:6379"
     volumes:
       - redis_data:/data
-      # - db
 
-      # celery_worker:
-      #   build: .
-      #   container_name: celery_worker-i
-      #   user: celeryuser
-      #   command: celery -A config worker -l info --pool=solo
-      #   volumes:
-      #     - .:/app
-      #   working_dir: /app
-      #   depends_on:
-      #     - redis
-      #     - web
-      #   env_file:
-      #     - .env
-      #   restart: always
+  celery_worker:
+    build: .
+    container_name: celery_worker-p
+    command: celery -A config worker -l info --pool=solo
+    volumes:
+      - .:/app
+    working_dir: /app
+    depends_on:
+      - redis
+      - web
+    env_file:
+      - .env
+    restart: always
 
-      # celery_beat:
-      #   build: .
-      #   container_name: celery_beat-i
-      #   user: celeryuser
-      #   command: celery -A config beat -l info --schedule=/tmp/celerybeat-schedule
-      #   volumes:
-      #     - .:/app
-      #   working_dir: /app
-      #   depends_on:
-      #     - redis
-      #     - web
-      #   env_file:
-      #     - .env
-      #   restart: always
+  celery_beat:
+    build: .
+    container_name: celery_beat-p
+    command: celery -A config beat -l info --schedule=/tmp/celerybeat-schedule
+    volumes:
+      - .:/app
+    working_dir: /app
+    depends_on:
+      - redis
+      - web
+    env_file:
+      - .env
+    restart: always
 volumes:
   # postgres_data:
   redis_data:

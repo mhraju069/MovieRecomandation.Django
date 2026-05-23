@@ -47,3 +47,5 @@ class TermsAndConditionsSerializer(serializers.ModelSerializer):
         model = TermsAndConditions
         fields = ['effective_date','updated_at', 'content_blocks']
         read_only_fields = ['effective_date','updated_at']
+
+

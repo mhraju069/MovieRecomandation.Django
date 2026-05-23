@@ -10,6 +10,7 @@ urlpatterns = [
     path('user/', UserRetrieveUpdateDestroyView.as_view(), name='user'),
     path('following/', GetFollowingView.as_view(), name='get_following'),
     path('followers/', GetFollowersView.as_view(), name='get_followers'),
+    path('oauth/login/', FirebaseLoginView.as_view(), name='oauth_login'),
     path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('reset-password/', ResetPasswordView.as_view(), name='reset_password'),
     path('followers/remove/<uuid:user_id>/', UnFollowView.as_view(), name='unfollow'),
