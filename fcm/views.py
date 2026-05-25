@@ -1,5 +1,6 @@
 from django.shortcuts import render
-from rest_framework import generics, permissions,response, status
+from rest_framework import generics, permissions, response, status
+from rest_framework.views import APIView
 from .models import *
 from .serializers import *
 
@@ -46,7 +47,7 @@ class FCMDeviceView(generics.CreateAPIView):
 
 
 
-class UpdateNotificationStatusView(generics.GenericAPIView):
+class UpdateNotificationStatusView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request, notification_id):

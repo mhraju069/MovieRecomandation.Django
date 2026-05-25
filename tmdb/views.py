@@ -1,8 +1,6 @@
-import json
-from datetime import date, timedelta
 from .utils import *
 from .models import *
-import requests,random
+import requests
 from .serializers import *
 from django.db.models import Avg
 from django.core.cache import cache
@@ -22,6 +20,7 @@ class AddPrefrences(generics.GenericAPIView):
             serializer = self.get_serializer(data=request.data,context={'request': request})
             if serializer.is_valid():
                 serializer.save()
+                cache.delete(f"user_home_recs_{request.user.id}")
                 return Response({"status": True, "log": "Prefrences added successfully"}, status=status.HTTP_200_OK)
             return Response({"status": False,"log": serializer.errors},status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
@@ -121,84 +120,67 @@ class HomeApiView(views.APIView):
 
     def get(self, request):
         try:
-            show_param = request.query_params.get("show", None)
-            media_type = "tv" if show_param and str(show_param).strip().lower() not in ("0", "false", "no", "off") else "movie"
+            requested_media_type = get_requested_media_type(request)
 
-            res_today_trending = self.get_tonight_trending_movies(media_type)
-            res_user_prefrences = self.get_user_prefrences(request.user, media_type)
-            res_movies_by_genre = self.get_movies_by_genre(request.query_params.get("genre", None), request.query_params.get("platform", None), media_type)
-            res_movies_by_platform = self.get_movies_by_platform(request.query_params.get("platform", None), media_type)
+            # Cache the personalized recommendations per user
+            cache_key = f"user_home_recs_{request.user.id}"
+            cached_recs = cache.get(cache_key)
+            if cached_recs:
+                poppin_tonight, because_you_liked = cached_recs
+            else:
+                poppin_tonight = build_whats_poppin_tonight(request.user)
+                because_you_liked = build_because_you_liked(
+                    request.user,
+                    extra_blocked_ids=get_recommendation_ids_by_type(poppin_tonight)
+                )
+                # Cache for 12 hours
+                cache.set(cache_key, (poppin_tonight, because_you_liked), timeout=43200)
 
-            response = {
-                "trending_tonight":res_today_trending,
-                "user_prefrences":res_user_prefrences,
-                "movies_by_genre":res_movies_by_genre,
-                "movies_by_platform":res_movies_by_platform
-            }
+            genre_id = request.query_params.get("genre", None)
+            platform_id = request.query_params.get("platform", None)
+
+            if requested_media_type:
+                media_type = requested_media_type
+                genre_key = f"{'shows' if media_type == 'tv' else 'movies'}_by_genre"
+                platform_key = f"{'shows' if media_type == 'tv' else 'movies'}_by_platform"
+                response = {
+                    "trending_tonight": poppin_tonight["shows" if media_type == "tv" else "movies"],
+                    "user_prefrences": because_you_liked["shows" if media_type == "tv" else "movies"],
+                    genre_key: self.get_movies_by_genre(genre_id, platform_id, media_type),
+                    platform_key: self.get_movies_by_platform(platform_id, media_type),
+                }
+            else:
+                response = {
+                    "trending_tonight": self._merge_media_lists(poppin_tonight.get("movies"), poppin_tonight.get("shows")),
+                    "user_prefrences": self._merge_media_lists(
+                        because_you_liked.get("movies"),
+                        because_you_liked.get("shows")
+                    ),
+                    "movies_by_genre": self._merge_media_lists(
+                        self.get_movies_by_genre(genre_id, platform_id, "movie"),
+                        self.get_movies_by_genre(genre_id, platform_id, "tv")
+                    ),
+                    "movies_by_platform": self._merge_media_lists(
+                        self.get_movies_by_platform(platform_id, "movie"),
+                        self.get_movies_by_platform(platform_id, "tv")
+                    ),
+                }
             
             return Response({"status": True, "log": response}, status=status.HTTP_200_OK)
         except Exception as e:
             return Response({"status": False,"log": str(e)},status=status.HTTP_404_NOT_FOUND)
 
 
-
-
     def _get_genre_map(self, media_type="movie"):
-        cache_key = f"tmdb_genres_{media_type}"
-        genres_cache = cache.get(cache_key)
-        if genres_cache is not None:
-            return {g["genre_id"]: g["genre_name"] for g in genres_cache}
+        return get_genre_map(media_type)
 
-        try:
-            endpoint = "https://api.themoviedb.org/3/genre/tv/list" if media_type == "tv" else "https://api.themoviedb.org/3/genre/movie/list"
-            genre_res = requests.get(endpoint, headers=tmdb_token())
-            genre_res.raise_for_status()
-            genres_data = genre_res.json().get("genres", [])
-            genres_cache = [{"genre_id": g.get("id"), "genre_name": g.get("name")} for g in genres_data]
-            cache.set(cache_key, genres_cache, timeout=86400)
-            return {g["genre_id"]: g["genre_name"] for g in genres_cache}
-        except Exception:
-            return {}
-
-    def get_tonight_trending_movies(self, media_type="movie"):
-
-        cache_key = f"tmdb_tonight_trending_{media_type}"
-        cached_data = cache.get(cache_key)
-        if cached_data:
-            print("Using cached data")
-            return cached_data
-
-        print("Using fresh data")
-        try:
-            res = requests.get(
-                f"https://api.themoviedb.org/3/trending/{media_type}/day",
-                headers=tmdb_token()
-            )
-            res.raise_for_status()
-            data = res.json().get("results", [])
-
-            genre_map = self._get_genre_map(media_type)
-
-            response = [
-                {
-                    "rank": index + 1,
-                    "id": i.get("id"),
-                    "type": i.get("media_type") or media_type,
-                    "title": i.get("title") if media_type == "movie" else i.get("name"),
-                    "genre": [genre_map.get(g_id, g_id) for g_id in i.get("genre_ids", [])],
-                    "rating": self.get_overall_rating(i.get("id")),
-                    "release_date": i.get("release_date") if media_type == "movie" else i.get("first_air_date"),
-                    "poster_path": f"https://image.tmdb.org/t/p/original{i.get('poster_path')}" if i.get('poster_path') else None,
-                }
-                for index, i in enumerate(data[:20])
-            ]
-
-            cache.set(cache_key, response, timeout=43200)
-
-            return response
-        except Exception as e:
-            print("⚠️Error in get_tonight_trending_movies:", e)
-            return None
+    def _merge_media_lists(self, movies, shows):
+        response = []
+        if movies:
+            response.extend(movies)
+        if shows:
+            response.extend(shows)
+        return response
     
 
     def get_user_prefrences(self, user, media_type="movie"):
@@ -367,7 +349,7 @@ class HomeApiView(views.APIView):
 
             genre_map = self._get_genre_map(media_type)
 
-            for pid in platform_list:
+            for pid in uncached_platforms:
                 single_cache_key = f"tmdb_movies_by_platform_{media_type}_{pid}"
                 try:
                     sort_field = "release_date.desc" if media_type == "movie" else "first_air_date.desc"
@@ -590,6 +572,7 @@ class AddReviewAndRating(generics.GenericAPIView):
                 if not created and not post.tags:
                     post.tags = get_movie_tags(valid_movie_id)
                     post.save(update_fields=['tags'])
+                cache.delete(f"user_home_recs_{request.user.id}")
                 return Response({"status": True, "log": "Review added successfully"}, status=status.HTTP_200_OK)
             return Response({"status": False, "log": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
@@ -690,6 +673,7 @@ class UpdatePreferencesView(generics.GenericAPIView):
             serializer = self.get_serializer(prefrences, data=request.data, partial=True)
             if serializer.is_valid():
                 serializer.save()
+                cache.delete(f"user_home_recs_{user.id}")
                 return Response({"status": True, "log": "Preferences updated successfully"}, status=status.HTTP_200_OK)
             return Response({"status": False, "log": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
@@ -746,6 +730,7 @@ class AddWatchlist(generics.GenericAPIView):
 
 class GetWatchlist(generics.GenericAPIView):
     permission_classes = [permissions.IsAuthenticated]
+    serializer_class = WatchlistSerializer
 
     def get(self, request):
         try:
@@ -891,6 +876,7 @@ class GetCommentsApiView(generics.ListAPIView):
 
 class DeleteCommentApiView(generics.DestroyAPIView):
     permission_classes = [permissions.IsAuthenticated]
+    serializer_class = FeedPostCommentSerializer
 
     def get_object(self):
         comment_id = self.kwargs.get("comment_id")
@@ -916,6 +902,7 @@ class DeleteCommentApiView(generics.DestroyAPIView):
 
 class GetReviewCommentsApiView(generics.GenericAPIView):
     permission_classes = [permissions.IsAuthenticated]
+    serializer_class = AddRatingCommentSerializer
 
     def get(self, request,review_id):
         try:
@@ -1003,3 +990,26 @@ class SearchMovieView(generics.GenericAPIView):
     def get_overall_rating(self, movie_id):
         result = ReviewAndRating.objects.filter(movie_id=movie_id).aggregate(avg_rating=Avg('rating'))
         return result.get('avg_rating') or 0.0
+
+
+
+
+class UpdateWatchStatusView(generics.GenericAPIView):
+    permission_classes = [permissions.IsAuthenticated]
+    serializer_class = WatchlistSerializer
+
+    def post(self, request, movie_id):
+        try:
+
+            watched, created = WatchedMovies.objects.get_or_create(user=request.user, movie_id=str(movie_id))
+            cache.delete(f"user_home_recs_{request.user.id}")
+
+            if created :
+               return Response({"status": True, "log": "Added to already watched"}, status=status.HTTP_200_OK)
+            else:
+                watched.delete()
+                return Response({"status": True, "log": "Removed from already watched"}, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            print("⚠️Error in UpdateWatchStatusView:", e)
+            return Response({"status": False, "log": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

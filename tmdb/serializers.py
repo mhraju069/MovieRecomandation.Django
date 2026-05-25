@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from decimal import Decimal
 from .models import *
 
 class GetProvidersSerializer(serializers.Serializer):
@@ -44,7 +45,7 @@ class PrefrencesSerializer(serializers.ModelSerializer):
 class AddReviewAndRatingSerializer(serializers.ModelSerializer):
     user = serializers.HiddenField(default=serializers.CurrentUserDefault())
     video = serializers.FileField(required=False,allow_null=True,allow_empty_file=True)
-    rating = serializers.IntegerField(required=True)
+    rating = serializers.DecimalField(max_digits=3, decimal_places=1, required=True)
     review = serializers.CharField(required=True)
     movie_id = serializers.IntegerField(required=True)
     type = serializers.CharField(required=False, default="movie")
@@ -58,16 +59,13 @@ class AddReviewAndRatingSerializer(serializers.ModelSerializer):
         review = attrs.get("review")
         rating = attrs.get("rating")
 
-        if not movie_id or not review or not rating:
+        if not movie_id or not review or rating is None:
             raise serializers.ValidationError("Movie ID, Review and Rating are required")
         
         if not isinstance(movie_id, int):
             raise serializers.ValidationError("Movie ID must be an integer")
         
-        if not isinstance(rating, int):
-            raise serializers.ValidationError("Rating must be an integer")
-        
-        if rating < 0 or rating > 10:
+        if rating < Decimal("0") or rating > Decimal("10"):
             raise serializers.ValidationError("Rating must be between 0 and 10")
         
         return attrs
@@ -79,8 +77,8 @@ class FeedPostsSerializer(serializers.Serializer):
     user = serializers.CharField()
     movie_id = serializers.IntegerField()
     review = serializers.CharField(allow_null=True, required=False)
-    user_rating = serializers.IntegerField()
-    average_rating = serializers.FloatField(allow_null=True, required=False)
+    user_rating = serializers.DecimalField(max_digits=3, decimal_places=1)
+    average_rating = serializers.DecimalField(max_digits=3, decimal_places=1, allow_null=True, required=False)
     video = serializers.CharField(allow_null=True, required=False)
     genre = serializers.JSONField(allow_null=True, required=False)
     likes= serializers.IntegerField()

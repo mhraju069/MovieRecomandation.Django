@@ -17,6 +17,7 @@ urlpatterns = [
     path('rating/comment/add/', AddRatingComment.as_view(), name='add_rating_comment'),
     path('prefrences/update/', UpdatePreferencesView.as_view(), name='update_prefrences'),
     path('post/comments/<uuid:post_id>/', GetCommentsApiView.as_view(), name='get_comments'),
+    path('already-watched/<int:movie_id>/', UpdateWatchStatusView.as_view(), name='update_watch_status'),
     path('rating/<uuid:review_id>/', GetReviewCommentsApiView.as_view(), name='get_review_comments'),
     path('post/comment/delete/<uuid:comment_id>/', DeleteCommentApiView.as_view(), name='delete_comment'),
 ]

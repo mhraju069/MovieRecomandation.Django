@@ -25,13 +25,14 @@ class ReviewAndRating(models.Model):
     type = models.CharField(max_length=20, default='movie')
     review = models.TextField(blank=True, null=True)
     video = models.FileField(upload_to='reviews', blank=True, null=True)
-    rating = models.IntegerField(blank=True, null=True)
+    rating = models.DecimalField(max_digits=3, decimal_places=1, blank=True, null=True)
     liked = models.ManyToManyField(settings.AUTH_USER_MODEL, related_name='liked_ratings',blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return f"Review and rating for: {self.user}"
+
 
 
 
@@ -45,6 +46,7 @@ class RatingComment(models.Model):
 
     def __str__(self):
         return f"Rating comment for: {self.user}"
+
 
 
 
@@ -91,3 +93,13 @@ class Watchlist(models.Model):
 
     def __str__(self):
         return f"Watchlist for: {self.user}"
+
+
+
+
+class WatchedMovies(models.Model):
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, related_name='watched_movies', on_delete=models.CASCADE)
+    movie_id = models.TextField(max_length=100,blank=True, null=True)
+
+    def __str__(self):
+        return f"Wathed movies for: {self.user}"
