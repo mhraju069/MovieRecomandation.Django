@@ -252,62 +252,77 @@ class HomeApiView(views.APIView):
 
 
     def get_movies_by_genre(self, genre_id=None, platform_id=None, media_type="movie"):
-        # Build cache key
-        if genre_id or platform_id:
-            cache_key = f"tmdb_movies_by_genre_{media_type}_{genre_id}_{platform_id}"
-        else:
-            cache_key = f"tmdb_movies_by_genre_{media_type}"
+        from .utils import get_onboarding_platform_ids, score_and_rank_candidates
+        user = self.request.user
+        onboarding_platforms = get_onboarding_platform_ids(user)
+        
+        target_platform = None
+        if platform_id:
+            target_platform = str(platform_id)
+        elif onboarding_platforms:
+            target_platform = "|".join(map(str, onboarding_platforms))
             
-        cached_data = cache.get(cache_key)
-        if cached_data:
-            print("Using cached data")
-            return cached_data
-
-        print("Using fresh data")
-        try:
-            sort_field = "release_date.desc" if media_type == "movie" else "first_air_date.desc"
-            url = f"https://api.themoviedb.org/3/discover/{media_type}?sort_by={sort_field}"
-            if genre_id:
-                url += f"&with_genres={genre_id}"
-            if platform_id:
-                url += f"&with_watch_providers={platform_id}&watch_region=US"
-            
-            res = requests.get(url, headers=tmdb_token())
-            res.raise_for_status()
-            movies = res.json().get("results", [])
-
-            if not movies:
-                return []
+        cache_key = f"tmdb_raw_genre_{media_type}_{genre_id}_{target_platform}"
+        raw_movies = cache.get(cache_key)
+        
+        if raw_movies is None:
+            try:
+                sort_field = "release_date.desc" if media_type == "movie" else "first_air_date.desc"
+                url = f"https://api.themoviedb.org/3/discover/{media_type}?sort_by={sort_field}"
+                if genre_id:
+                    url += f"&with_genres={genre_id}"
+                if target_platform:
+                    url += f"&with_watch_providers={target_platform}&watch_region=US"
                 
-            genre_map = self._get_genre_map(media_type)
-
-            response = [
-                {   "rank" : index + 1,
-                    "id": i.get("id"),
-                    "type": i.get("media_type", media_type),
-                    "title": i.get("title") if media_type == "movie" else i.get("name"),
-                    "genre": [genre_map.get(g_id, g_id) for g_id in i.get("genre_ids", [])],
-                    "language": i.get("original_language"),
-                    "release_date": i.get("release_date") if media_type == "movie" else i.get("first_air_date"),
-                    "poster_path": f"https://image.tmdb.org/t/p/original{i.get('poster_path')}" if i.get('poster_path') else None,
-                    "popularity": i.get("popularity", 0.0),
-                }
-                for index, i in enumerate(movies)
-            ]   
-
-            cache.set(cache_key, response, timeout=86400)
+                res = requests.get(url, headers=tmdb_token())
+                res.raise_for_status()
+                raw_movies = res.json().get("results", [])
+                cache.set(cache_key, raw_movies, timeout=86400)
+            except Exception as e:
+                print("⚠️Error in get_movies_by_genre discover:", e)
+                raw_movies = []
+                
+        if not raw_movies:
+            return []
             
-            return response
-
-        except Exception as e:
-            print("⚠️Error in get_movies_by_genre:", e)
-            return None
+        genre_map = self._get_genre_map(media_type)
+        candidates = []
+        for i in raw_movies:
+            candidates.append({
+                "id": i.get("id"),
+                "type": i.get("media_type", media_type),
+                "title": i.get("title") if media_type == "movie" else i.get("name"),
+                "genre_ids": i.get("genre_ids", []),
+                "genre": [genre_map.get(g_id, g_id) for g_id in i.get("genre_ids", [])],
+                "language": i.get("original_language"),
+                "release_date": i.get("release_date") if media_type == "movie" else i.get("first_air_date"),
+                "poster_path": f"https://image.tmdb.org/t/p/original{i.get('poster_path')}" if i.get('poster_path') else None,
+                "popularity": i.get("popularity", 0.0),
+            })
+            
+        ranked_candidates = score_and_rank_candidates(user, candidates, media_type, filter_blocked=True)
+        
+        response = []
+        for index, item in enumerate(ranked_candidates[:10], start=1):
+            item_data = item.copy()
+            item_data.pop("genre_ids", None)
+            item_data["rank"] = index
+            response.append(item_data)
+            
+        return response
 
 
     def get_movies_by_platform(self, platform_id, media_type="movie"):
+        from .utils import get_onboarding_platform_ids, score_and_rank_candidates
+        user = self.request.user
+        
         try:
             if not platform_id:
-                return []
+                onboarding_platforms = get_onboarding_platform_ids(user)
+                if onboarding_platforms:
+                    platform_id = list(onboarding_platforms)
+                else:
+                    return []
 
             if isinstance(platform_id, list):
                 platform_list = [str(x).strip() for x in platform_id if str(x).strip()]
@@ -345,7 +360,7 @@ class HomeApiView(views.APIView):
 
             headers = tmdb_token()
             if not headers:
-                return None
+                return []
 
             genre_map = self._get_genre_map(media_type)
 
@@ -391,14 +406,38 @@ class HomeApiView(views.APIView):
             if not combined_movies:
                 return []
 
-            combined_movies.sort(key=lambda m: m.get("release_date") or m.get("first_air_date") or "", reverse=True)
-            for index, movie in enumerate(combined_movies, start=1):
-                movie["rank"] = index
-            return combined_movies
+            # Format for scoring and personalization
+            inv_genre_map = {name: gid for gid, name in genre_map.items()}
+            candidates = []
+            for m in combined_movies:
+                genre_names = m.get("genre", [])
+                genre_ids = [inv_genre_map[name] for name in genre_names if name in inv_genre_map]
+                candidates.append({
+                    "id": m.get("id"),
+                    "type": m.get("type", media_type),
+                    "title": m.get("title"),
+                    "genre_ids": genre_ids,
+                    "genre": genre_names,
+                    "language": m.get("language"),
+                    "release_date": m.get("release_date"),
+                    "poster_path": m.get("poster_path"),
+                    "popularity": m.get("popularity", 0.0),
+                })
+                
+            ranked = score_and_rank_candidates(user, candidates, media_type, filter_blocked=True)
+            
+            response = []
+            for index, item in enumerate(ranked[:10], start=1):
+                item_data = item.copy()
+                item_data.pop("genre_ids", None)
+                item_data["rank"] = index
+                response.append(item_data)
+                
+            return response
 
         except Exception as e:
             print("⚠️Error in get_movies_by_platform:", e)
-            return None
+            return []
 
 
     def get_overall_rating(self, movie):
