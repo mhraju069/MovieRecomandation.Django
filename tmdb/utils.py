@@ -1384,3 +1384,53 @@ def score_and_rank_candidates(user, candidates, media_type, extra_blocked_ids=No
     
     ranked_candidates = [x["candidate"] for x in scored_candidates]
     return ranked_candidates
+
+
+def check_violation(text):
+    import re
+    if not text:
+        return False
+        
+    # Blocked phrases (checked as substrings)
+    blocked_phrases = [
+        "kill yourself", "go die", "i hate you", "you are ugly", "you are stupid",
+        "piece of shit", "dumbass", "mother fucker", "motherfucker", "son of a bitch",
+        "fuck you", "fuck off", "die in a fire", "hope you die"
+    ]
+    
+    # Blocked individual words (checked as whole words)
+    blocked_words = {
+        # English Profanities / Adult terms
+        "fuck", "fucking", "fucker", "shit", "shitty", "ass", "asshole", "bitch", "bitches",
+        "bastard", "cunt", "dick", "pussy", "slut", "whore", "nigger", "faggot", "retard",
+        "retarded", "porn", "sex", "hentai", "xxx", "naked", "nude", "orgasm", "penis",
+        "vagina", "clitoris", "blowjob", "handjob", "cum", "ejaculate", "idiot", "dumb",
+        "moron", "fatso", "loser", "worthless", "garbage", "trash", "crap",
+    }
+    
+    # Normalize text
+    text_lower = text.lower()
+    
+    # 1. Check blocked phrases
+    for phrase in blocked_phrases:
+        if phrase in text_lower:
+            return True
+            
+    # 2. Check individual words by splitting by whitespace and stripping punctuation
+    import string
+    punctuation_to_strip = string.punctuation + '।`~@#$%^&*()-_=+[]{}|;:\'",.<>?/\\'
+    words = [w.strip(punctuation_to_strip) for w in text_lower.split()]
+    for word in words:
+        if word in blocked_words:
+            return True
+            
+    # 3. Check for typical bypass patterns (e.g. f.u.c.k, f*ck)
+    # Remove all punctuation and spaces to check if it forms a bad word
+    cleaned_no_spaces = re.sub(r'[^a-z0-9]', '', text_lower)
+    for b_word in blocked_words:
+        # Only check English words for simple character bypasses to avoid false positives in Bangla
+        if b_word.isascii() and len(b_word) > 3:
+            if b_word in cleaned_no_spaces:
+                return True
+                
+    return False

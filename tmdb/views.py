@@ -593,6 +593,11 @@ class AddReviewAndRating(generics.GenericAPIView):
 
     def post(self, request):
         try:
+            review = request.data.get("review")
+            from .utils import check_violation
+            if review and check_violation(review):
+                return Response({"status": False, "log": "Your review contains prohibited content (bullying, harassment, adult content, or bad words)."}, status=status.HTTP_400_BAD_REQUEST)
+
             movie_id = request.data.get("movie_id")
             type = request.data.get("type", "movie")
             instance = None
@@ -633,6 +638,11 @@ class AddRatingComment(generics.GenericAPIView):
                 data["rating_id"] = data["review_id"]
             elif "rating" in data and "rating_id" not in data:
                 data["rating_id"] = data["rating"]
+
+            comment = data.get("comment")
+            from .utils import check_violation
+            if comment and check_violation(comment):
+                return Response({"status": False, "log": "Your comment contains prohibited content (bullying, harassment, adult content, or bad words)."}, status=status.HTTP_400_BAD_REQUEST)
 
             serializer = self.get_serializer(data=data)
             if serializer.is_valid():
@@ -874,13 +884,17 @@ class CommentPostApiView(generics.GenericAPIView):
 
     def post(self, request):
         try:
+            comment = request.data.get("comment")
+            from .utils import check_violation
+            if comment and check_violation(comment):
+                return Response({"status": False, "log": "Your comment contains prohibited content (bullying, harassment, adult content, or bad words)."}, status=status.HTTP_400_BAD_REQUEST)
+
             serializer = self.get_serializer(data=request.data)
             if serializer.is_valid():
                 serializer.save()
                 return Response({"status": True, "log": "Comment added successfully"}, status=status.HTTP_200_OK)
             user = request.user
             post_id = request.data.get("post_id")
-            comment = request.data.get("comment")
             post = FeedPost.objects.get(id=post_id)
             FeedPostComment.objects.create(post=post, user=user, comment=comment)
             return Response({"status": True, "log": "Commented successfully"}, status=status.HTTP_200_OK)

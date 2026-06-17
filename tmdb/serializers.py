@@ -67,6 +67,10 @@ class AddReviewAndRatingSerializer(serializers.ModelSerializer):
         
         if rating < Decimal("0") or rating > Decimal("10"):
             raise serializers.ValidationError("Rating must be between 0 and 10")
+            
+        from .utils import check_violation
+        if review and check_violation(review):
+            raise serializers.ValidationError("Your review contains prohibited content (bullying, harassment, adult content, or bad words).")
         
         return attrs
 
@@ -113,6 +117,12 @@ class CommentOnPostSerializer(serializers.ModelSerializer):
         model = FeedPostComment
         fields = ['user', 'post_id', 'comment']
 
+    def validate_comment(self, value):
+        from .utils import check_violation
+        if check_violation(value):
+            raise serializers.ValidationError("Your comment contains prohibited content (bullying, harassment, adult content, or bad words).")
+        return value
+
 
 
 class FeedPostCommentSerializer(serializers.ModelSerializer):
@@ -124,6 +134,12 @@ class FeedPostCommentSerializer(serializers.ModelSerializer):
         fields = ['id', 'user', 'post_id', 'comment', 'created_at']
         read_only_fields = ['id', 'created_at']
 
+    def validate_comment(self, value):
+        from .utils import check_violation
+        if check_violation(value):
+            raise serializers.ValidationError("Your comment contains prohibited content (bullying, harassment, adult content, or bad words).")
+        return value
+
 
 
 class AddRatingCommentSerializer(serializers.ModelSerializer):
@@ -134,6 +150,12 @@ class AddRatingCommentSerializer(serializers.ModelSerializer):
     class Meta:
         model = RatingComment
         fields = ['user', 'rating_id', 'comment']
+
+    def validate_comment(self, value):
+        from .utils import check_violation
+        if check_violation(value):
+            raise serializers.ValidationError("Your comment contains prohibited content (bullying, harassment, adult content, or bad words).")
+        return value
 
 
 class AddLikeToRatingSerializer(serializers.Serializer):
