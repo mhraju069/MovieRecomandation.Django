@@ -29,6 +29,30 @@ class AddPrefrences(generics.GenericAPIView):
 
 
 
+class GetPrefrences(generics.GenericAPIView):
+    permission_classes = [permissions.IsAuthenticated]
+    serializer_class = PrefrencesSerializer
+
+    def get(self, request):
+        try:
+            prefrences = UserPrefrences.objects.filter(user=request.user).first()
+            if not prefrences:
+                return Response({
+                    "status": True,
+                    "log": {
+                        "platform": [],
+                        "genre": []
+                    }
+                }, status=status.HTTP_200_OK)
+            
+            serializer = self.get_serializer(prefrences)
+            return Response({"status": True, "log": serializer.data}, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({"status": False, "log": str(e)}, status=status.HTTP_404_NOT_FOUND)
+
+
+
+
 class GetProvidersView(generics.GenericAPIView):
     permission_classes = [permissions.AllowAny]
     serializer_class = GetProvidersSerializer
@@ -1066,3 +1090,20 @@ class UpdateWatchStatusView(generics.GenericAPIView):
         except Exception as e:
             print("⚠️Error in UpdateWatchStatusView:", e)
             return Response({"status": False, "log": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+
+
+# class RecentlyAddedMoviesView(generics.GenericAPIView):
+#     permission_classes = [permissions.IsAuthenticated]
+#     serializer_class = RecentlyAddedMoviesSerializer
+
+#     def get(self, request):
+#         try:
+#             user = request.user
+#             recently_added = RecentlyAddedMovies.objects.filter(user=user).order_by('-created_at')
+#             serializer = self.get_serializer(recently_added, many=True)
+#             return Response({"status": True, "log": serializer.data}, status=status.HTTP_200_OK)
+#         except Exception as e:
+#             print("⚠️Error in RecentlyAddedMoviesView:", e)
+#             return Response({"status": False, "log": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

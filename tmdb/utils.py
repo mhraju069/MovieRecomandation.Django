@@ -501,9 +501,6 @@ def _warm_watch_providers(candidate_ids, media_type):
         return
 
     media_type = normalize_media_type(media_type)
-    unavailable_cache_key = "tmdb_watch_provider_lookup_unavailable"
-    if cache.get(unavailable_cache_key):
-        return
 
     # Check which candidate IDs do not have cached provider IDs
     uncached_ids = []
@@ -543,10 +540,8 @@ def _warm_watch_providers(candidate_ids, media_type):
             else:
                 cache.set(cache_key, [], timeout=300)
         except requests.exceptions.ConnectionError:
-            cache.set(unavailable_cache_key, True, timeout=300)
             cache.set(cache_key, [], timeout=300)
         except requests.exceptions.Timeout:
-            cache.set(unavailable_cache_key, True, timeout=120)
             cache.set(cache_key, [], timeout=300)
         except Exception as e:
             print(f"Error fetching watch providers for {cid}: {e}")
@@ -559,9 +554,6 @@ def _warm_watch_providers(candidate_ids, media_type):
 
 def _fetch_tmdb_candidate_pool(seed_ids, media_type):
     media_type = normalize_media_type(media_type)
-    unavailable_cache_key = "tmdb_recommendation_lookup_unavailable"
-    if cache.get(unavailable_cache_key):
-        return []
 
     candidates = {}
     headers = tmdb_token()
@@ -598,10 +590,8 @@ def _fetch_tmdb_candidate_pool(seed_ids, media_type):
                 res.raise_for_status()
                 return seed_id, res.json().get("results", [])
             except requests.exceptions.ConnectionError:
-                cache.set(unavailable_cache_key, True, timeout=300)
                 return seed_id, []
             except requests.exceptions.Timeout:
-                cache.set(unavailable_cache_key, True, timeout=120)
                 return seed_id, []
             except Exception as e:
                 print(f"Error fetching {endpoint} for {seed_id}: {e}")
@@ -670,9 +660,6 @@ def _is_available_on_platform(title_id, media_type, platform_ids):
         return False
 
     media_type = normalize_media_type(media_type)
-    unavailable_cache_key = "tmdb_watch_provider_lookup_unavailable"
-    if cache.get(unavailable_cache_key):
-        return False
 
     cache_key = f"tmdb_watch_provider_ids_{media_type}_{title_id}"
     provider_ids = cache.get(cache_key)
@@ -696,11 +683,9 @@ def _is_available_on_platform(title_id, media_type, platform_ids):
                             provider_ids.add(int(provider_id))
             cache.set(cache_key, list(provider_ids), timeout=86400 * 7)
         except requests.exceptions.ConnectionError:
-            cache.set(unavailable_cache_key, True, timeout=300)
             cache.set(cache_key, [], timeout=300)
             provider_ids = set()
         except requests.exceptions.Timeout:
-            cache.set(unavailable_cache_key, True, timeout=120)
             cache.set(cache_key, [], timeout=300)
             provider_ids = set()
         except Exception as e:
