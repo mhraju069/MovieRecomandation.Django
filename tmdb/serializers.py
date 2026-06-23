@@ -181,4 +181,12 @@ class AddLikeToRatingSerializer(serializers.Serializer):
 
 class SearchMovieSerializer(serializers.Serializer):
     keyword = serializers.CharField(required=True)
+
+
+
+class RecentlyAddedMoviesSerializer(serializers.Serializer):
+    movie_id = serializers.IntegerField()
+    poster_url = serializers.CharField()
+    type = serializers.CharField()
+    avg_rating = serializers.DecimalField(max_digits=3, decimal_places=1,allow_null=True,required=False)
     

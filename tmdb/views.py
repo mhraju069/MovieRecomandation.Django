@@ -1094,16 +1094,53 @@ class UpdateWatchStatusView(generics.GenericAPIView):
 
 
 
-# class RecentlyAddedMoviesView(generics.GenericAPIView):
-#     permission_classes = [permissions.IsAuthenticated]
-#     serializer_class = RecentlyAddedMoviesSerializer
+class RecentlyWatchedMoviesView(generics.GenericAPIView):
+    permission_classes = [permissions.IsAuthenticated]
+    serializer_class = RecentlyAddedMoviesSerializer
 
-#     def get(self, request):
-#         try:
-#             user = request.user
-#             recently_added = RecentlyAddedMovies.objects.filter(user=user).order_by('-created_at')
-#             serializer = self.get_serializer(recently_added, many=True)
-#             return Response({"status": True, "log": serializer.data}, status=status.HTTP_200_OK)
-#         except Exception as e:
-#             print("⚠️Error in RecentlyAddedMoviesView:", e)
-#             return Response({"status": False, "log": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    def get_overall_rating(self, movie_id):
+        result = ReviewAndRating.objects.filter(movie_id=movie_id).aggregate(avg_rating=Avg('rating'))
+        return result.get('avg_rating') or 0.0
+
+    def get_poster_path(self, movie_id, media_type):
+        cache_key = f"tmdb_movie_details_{movie_id}"
+        movie_details = cache.get(cache_key)
+        if movie_details and "image" in movie_details:
+            return movie_details["image"]
+            
+        try:
+            tmdb_type = 'tv' if media_type == 'tv' else 'movie'
+            res = requests.get(f"https://api.themoviedb.org/3/{tmdb_type}/{movie_id}", headers=tmdb_token(), timeout=5)
+            if res.status_code == 200:
+                data = res.json()
+                poster = data.get("poster_path")
+                image_url = f"https://image.tmdb.org/t/p/original{poster}" if poster else None
+                if not movie_details:
+                    movie_details = {}
+                movie_details["image"] = image_url
+                cache.set(cache_key, movie_details, timeout=86400 * 7)
+                return image_url
+        except Exception as e:
+            print(f"Error fetching TMDB details for {movie_id}: {e}")
+        return None
+
+    def get(self, request):
+        try:
+            user = request.user
+            recently_added = ReviewAndRating.objects.filter(user=user).order_by('-created_at')[:5]
+            response = []
+            
+            for i in recently_added:
+                avg_rating = self.get_overall_rating(i.movie_id)
+                poster_url = self.get_poster_path(i.movie_id, i.type)
+
+                response.append({
+                    "movie_id": i.movie_id,
+                    "poster_url": poster_url,
+                    "type": i.type,
+                    "avg_rating": avg_rating,
+                })
+            return Response({"status": True, "log": response}, status=status.HTTP_200_OK)
+        except Exception as e:
+            print("⚠️Error in RecentlyAddedMoviesView:", e)
+            return Response({"status": False, "log": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
