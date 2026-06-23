@@ -566,22 +566,41 @@ class MovieDetailView(views.APIView):
 
     def GetRating(self, request, movie_id, media_type='movie'):
         try:
-            reviews = ReviewAndRating.objects.filter(movie_id=movie_id, type=media_type).exclude(rating__isnull=True)
-            response = [
-                {
-                    'user': i.user.name or i.user.email[:i.user.email.index('@')].title(),
-                    'review': i.review ,
+            from authentication.models import Follows
+            user = request.user
+            friend_ids = set(Follows.objects.filter(follower=user, status=True).values_list('following_id', flat=True)) | \
+                         set(Follows.objects.filter(following=user, status=True).values_list('follower_id', flat=True))
+
+            reviews = ReviewAndRating.objects.filter(movie_id=movie_id, type=media_type).exclude(rating__isnull=True).order_by('-created_at')
+            
+            friend_reviews = []
+            other_reviews = []
+
+            for i in reviews:
+                try:
+                    user_name = i.user.name or i.user.email[:i.user.email.index('@')].title()
+                except Exception:
+                    user_name = i.user.email
+
+                review_data = {
+                    'user': user_name,
+                    'review': i.review,
                     "rating": i.rating,
                     'video': request.build_absolute_uri(i.video.url) if i.video else None,
                     "review_id": i.id,
                     'likes': i.liked.count(),
-                    'liked': i.liked.filter(id=request.user.id).exists(),
+                    'liked': i.liked.filter(id=user.id).exists(),
                     'comments': RatingComment.objects.filter(rating=i).count(),
                     "created_at": i.created_at,
                 }
-                for i in reviews[:5]
-            ] 
-            return response
+
+                if i.user_id == user.id or i.user_id in friend_ids:
+                    friend_reviews.append(review_data)
+                else:
+                    other_reviews.append(review_data)
+
+            combined_reviews = friend_reviews + other_reviews
+            return combined_reviews[:5]
         except Exception as e:
             print("⚠️Error in GetRating:", e)
             return None
