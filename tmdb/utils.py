@@ -887,7 +887,17 @@ def get_post(user, type, request=None):
             
         movie_list.append(movie_data)
         
-    return movie_list
+    # Sort to show top 5 by average_rating, and the rest chronologically (newest first)
+    sorted_by_rating = sorted(
+        movie_list,
+        key=lambda x: (x.get("average_rating") or 0.0),
+        reverse=True
+    )
+    top_5 = sorted_by_rating[:5]
+    top_5_ids = {item["movie_id"] for item in top_5}
+    rest = [item for item in movie_list if item["movie_id"] not in top_5_ids]
+    
+    return top_5 + rest
 
 
 
