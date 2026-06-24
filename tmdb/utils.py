@@ -839,38 +839,49 @@ def get_recommendation_ids_by_type(recommendations):
 
 
 
-def get_post(user, type, request=None):
+def get_post(user, type=None, request=None):
     from django.db.models import Avg
-    reviews = ReviewAndRating.objects.filter(user=user, type=type).order_by('-created_at')
+    reviews = ReviewAndRating.objects.filter(user=user).order_by('-created_at')
     
     movie_list = []
+    show_list = []
     seen_movies = set()
+    seen_shows = set()
     
     for review in reviews:
-        if review.movie_id in seen_movies:
-            continue
-        seen_movies.add(review.movie_id)
+        is_movie = review.type == 'movie'
+        media_id = review.movie_id
+        
+        if is_movie:
+            if media_id in seen_movies:
+                continue
+            seen_movies.add(media_id)
+        else:
+            if media_id in seen_shows:
+                continue
+            seen_shows.add(media_id)
         
         # Aggregate local reviews rating for the average rating
-        avg_rating = ReviewAndRating.objects.filter(movie_id=review.movie_id, type=type).aggregate(Avg('rating'))['rating__avg']
+        avg_rating = ReviewAndRating.objects.filter(movie_id=media_id, type=review.type).aggregate(Avg('rating'))['rating__avg']
         if avg_rating is not None:
             avg_rating = round(avg_rating, 1)
         else:
             avg_rating = review.rating
 
         movie_data = {
-            "movie_id": review.movie_id,
+            "movie_id": media_id,
             "image": None,
-            "average_rating": avg_rating
+            "average_rating": avg_rating,
+            "type": "movie" if is_movie else "show"
         }
         
-        cache_key = f"tmdb_movie_details_{review.movie_id}"
+        cache_key = f"tmdb_movie_details_{media_id}"
         movie_details = cache.get(cache_key)
         
         if not movie_details or "image" not in movie_details:
             try:
-                tmdb_type = 'tv' if type == 'tv' else 'movie'
-                res = requests.get(f"https://api.themoviedb.org/3/{tmdb_type}/{review.movie_id}", headers=tmdb_token(), timeout=5)
+                tmdb_type = 'tv' if review.type == 'tv' else 'movie'
+                res = requests.get(f"https://api.themoviedb.org/3/{tmdb_type}/{media_id}", headers=tmdb_token(), timeout=5)
                 if res.status_code == 200:
                     data = res.json()
                     poster = data.get("poster_path")
@@ -881,23 +892,30 @@ def get_post(user, type, request=None):
                     movie_details["image"] = movie_data["image"]
                     cache.set(cache_key, movie_details, timeout=86400 * 7)
             except Exception as e:
-                print(f"Error fetching TMDB details for {review.movie_id}: {e}")
+                print(f"Error fetching TMDB details for {media_id}: {e}")
         else:
             movie_data["image"] = movie_details.get("image")
             
-        movie_list.append(movie_data)
+        if is_movie:
+            movie_list.append(movie_data)
+        else:
+            show_list.append(movie_data)
         
-    # Sort to show top 5 by average_rating, and the rest chronologically (newest first)
-    sorted_by_rating = sorted(
-        movie_list,
-        key=lambda x: (x.get("average_rating") or 0.0),
-        reverse=True
-    )
-    top_5 = sorted_by_rating[:5]
-    top_5_ids = {item["movie_id"] for item in top_5}
-    rest = [item for item in movie_list if item["movie_id"] not in top_5_ids]
-    
-    return top_5 + rest
+    def sort_media_list(lst):
+        sorted_by_rating = sorted(
+            lst,
+            key=lambda x: (x.get("average_rating") or 0.0),
+            reverse=True
+        )
+        top_5 = sorted_by_rating[:5]
+        top_5_ids = {item["movie_id"] for item in top_5}
+        rest = [item for item in lst if item["movie_id"] not in top_5_ids]
+        return top_5 + rest
+
+    return {
+        "movies": sort_media_list(movie_list),
+        "shows": sort_media_list(show_list)
+    }
 
 
 
