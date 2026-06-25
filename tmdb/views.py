@@ -651,6 +651,26 @@ class AddReviewAndRating(generics.GenericAPIView):
             if serializer.is_valid():
                 serializer.save()
                 valid_movie_id = serializer.validated_data.get("movie_id")
+
+                # Remove from watchlist if it exists
+                watchlist = Watchlist.objects.filter(user=request.user).first()
+                if watchlist and watchlist.movie_ids:
+                    if isinstance(watchlist.movie_ids, list):
+                        watchlist.movie_ids = {"movie": watchlist.movie_ids}
+                    elif not isinstance(watchlist.movie_ids, dict):
+                        watchlist.movie_ids = {}
+
+                    modified = False
+                    for key, ids in list(watchlist.movie_ids.items()):
+                        if isinstance(ids, list):
+                            matched_ids = [mid for mid in ids if str(mid) == str(valid_movie_id)]
+                            if matched_ids:
+                                for mid in matched_ids:
+                                    ids.remove(mid)
+                                modified = True
+                    if modified:
+                        watchlist.save(update_fields=["movie_ids"])
+
                 post, created = FeedPost.objects.get_or_create(
                     user=request.user,
                     review=serializer.instance,
