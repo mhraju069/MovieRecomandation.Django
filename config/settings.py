@@ -16,7 +16,7 @@ else:
     print(f"Warning: Firebase certificate not found at {cred_path}")
 
 CORS_ALLOW_CREDENTIALS = True
-DEBUG = os.getenv('DEBUG', True)
+DEBUG = os.getenv("DEBUG", "False").lower() == "true"
 SECRET_KEY = os.getenv("SECRET_KEY")
 BASE_DIR = Path(__file__).resolve().parent.parent
 STRIPE_PUBLIC_KEY = os.getenv('STRIPE_PUBLIC_KEY')
