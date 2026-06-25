@@ -518,7 +518,6 @@ class MovieDetailView(views.APIView):
                     "language": movie.get("original_language"),
                     "release_date": movie.get("release_date") if media_type == "movie" else movie.get("first_air_date"),
                     "poster_path": f"https://image.tmdb.org/t/p/original{movie.get('backdrop_path')}" if movie.get('backdrop_path') else (f"https://image.tmdb.org/t/p/original{movie.get('poster_path')}" if movie.get('poster_path') else None),
-                    "backdrop_path": f"https://image.tmdb.org/t/p/original{movie.get('backdrop_path')}" if movie.get('backdrop_path') else None,
                     "runtime": movie.get("runtime") if media_type == "movie" else (movie.get("episode_run_time") or [None])[0],
                     "available_on": list(provider_map.values()),
                     "budget": movie.get("budget") if media_type == "movie" else None,
