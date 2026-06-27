@@ -708,7 +708,27 @@ class AddRatingComment(generics.GenericAPIView):
 
             serializer = self.get_serializer(data=data)
             if serializer.is_valid():
-                serializer.save()
+                comment_obj = serializer.save()
+
+                # Send notification to the review owner
+                try:
+                    review = comment_obj.rating
+                    commenter = comment_obj.user
+                    if review.user != commenter:
+                        from fcm.utils import create_and_send_notification
+                        commenter_name = commenter.name or commenter.email.split('@')[0].title()
+                        title = "New reply on your review"
+                        message = f"{commenter_name} replied to your review: {comment_obj.comment[:60]}"
+                        create_and_send_notification(
+                            user=review.user,
+                            title=title,
+                            message=message,
+                            movie_id=review.movie_id,
+                            media_type=review.type
+                        )
+                except Exception as ne:
+                    print(f"Error sending reply notification: {ne}")
+
                 return Response({"status": True, "log": "Comment added successfully"}, status=status.HTTP_200_OK)
             return Response({"status": False, "log": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
@@ -738,6 +758,26 @@ class AddLikeToRating(generics.GenericAPIView):
                 if serializer.validated_data.get("liked") == True:
                     return Response({"status": True, "log": "Like removed successfully"}, status=status.HTTP_200_OK)
                 else:
+                    # Like added! Send notification to the review owner
+                    try:
+                        rating_id = serializer.validated_data.get("rating_id")
+                        review = ReviewAndRating.objects.get(id=rating_id)
+                        liker = request.user
+                        if review.user != liker:
+                            from fcm.utils import create_and_send_notification
+                            liker_name = liker.name or liker.email.split('@')[0].title()
+                            title = "Review Liked"
+                            message = f"{liker_name} liked your review."
+                            create_and_send_notification(
+                                user=review.user,
+                                title=title,
+                                message=message,
+                                movie_id=review.movie_id,
+                                media_type=review.type
+                            )
+                    except Exception as ne:
+                        print(f"Error sending review like notification: {ne}")
+
                     return Response({"status": True, "log": "Like added successfully"}, status=status.HTTP_200_OK)
             return Response({"status": False, "log": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
@@ -930,6 +970,26 @@ class LikePostApiView(generics.GenericAPIView):
             else:
                 post.likes.add(user)
                 liked = True
+
+            # Send notification to post owner if liked
+            if liked:
+                try:
+                    liker = user
+                    if post.user != liker:
+                        from fcm.utils import create_and_send_notification
+                        liker_name = liker.name or liker.email.split('@')[0].title()
+                        title = "Post Liked"
+                        message = f"{liker_name} liked your post."
+                        create_and_send_notification(
+                            user=post.user,
+                            title=title,
+                            message=message,
+                            movie_id=post.review.movie_id,
+                            media_type=post.review.type
+                        )
+                except Exception as ne:
+                    print(f"Error sending post like notification: {ne}")
+
             return Response({"status": True, "log": "Liked successfully" if liked else "Like removed"}, status=status.HTTP_200_OK)
         except FeedPost.DoesNotExist:
             return Response({"status": False, "log": "Post not found"}, status=status.HTTP_404_NOT_FOUND)
@@ -951,15 +1011,38 @@ class CommentPostApiView(generics.GenericAPIView):
             if comment and check_violation(comment):
                 return Response({"status": False, "log": "Your comment contains prohibited content (bullying, harassment, adult content, or bad words)."}, status=status.HTTP_400_BAD_REQUEST)
 
+            comment_obj = None
             serializer = self.get_serializer(data=request.data)
             if serializer.is_valid():
-                serializer.save()
-                return Response({"status": True, "log": "Comment added successfully"}, status=status.HTTP_200_OK)
-            user = request.user
-            post_id = request.data.get("post_id")
-            post = FeedPost.objects.get(id=post_id)
-            FeedPostComment.objects.create(post=post, user=user, comment=comment)
-            return Response({"status": True, "log": "Commented successfully"}, status=status.HTTP_200_OK)
+                comment_obj = serializer.save()
+                response_data = {"status": True, "log": "Comment added successfully"}
+            else:
+                user = request.user
+                post_id = request.data.get("post_id")
+                post = FeedPost.objects.get(id=post_id)
+                comment_obj = FeedPostComment.objects.create(post=post, user=user, comment=comment)
+                response_data = {"status": True, "log": "Commented successfully"}
+
+            if comment_obj:
+                try:
+                    post = comment_obj.post
+                    commenter = comment_obj.user
+                    if post.user != commenter:
+                        from fcm.utils import create_and_send_notification
+                        commenter_name = commenter.name or commenter.email.split('@')[0].title()
+                        title = "New comment on your post"
+                        message = f"{commenter_name} commented on your post: {comment_obj.comment[:60]}"
+                        create_and_send_notification(
+                            user=post.user,
+                            title=title,
+                            message=message,
+                            movie_id=post.review.movie_id,
+                            media_type=post.review.type
+                        )
+                except Exception as ne:
+                    print(f"Error sending comment notification: {ne}")
+
+            return Response(response_data, status=status.HTTP_200_OK)
         except FeedPost.DoesNotExist:
             return Response({"status": False, "log": "Post not found"}, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:

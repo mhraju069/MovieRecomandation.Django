@@ -54,3 +54,56 @@ def send_fcm_to_user(user, title, body, data=None, deactivate_invalid=True):
     except Exception as exc:
         logger.exception('Failed to send FCM for user %s: %s', getattr(user, 'id', None), exc)
         return None
+
+
+import random
+from .models import Notification
+
+def create_and_send_notification(user, title, message, movie_id=None, media_type='movie'):
+    """
+    Creates a Notification record in the DB and attempts to send an FCM push notification.
+    Ensures no exception crashes the main request flow.
+    """
+    if not user:
+        return None
+
+    # Notification preferences check
+    if not getattr(user, 'notify', True):
+        return None
+
+    if not movie_id:
+        movie_id = random.randint(100000, 999999)
+
+    if media_type not in ['movie', 'tv']:
+        media_type = 'movie'
+
+    try:
+        # Avoid duplicate notifications for the same user, movie, and type by updating it if exists
+        notification = Notification.objects.filter(user=user, movie_id=movie_id, type=media_type).first()
+        if notification:
+            notification.title = title
+            notification.message = message
+            notification.save()
+        else:
+            notification = Notification.objects.create(
+                user=user,
+                movie_id=movie_id,
+                type=media_type,
+                title=title,
+                message=message,
+            )
+
+        # Send FCM
+        send_fcm_to_user(
+            user=user,
+            title=title,
+            body=message,
+            data={
+                'movie_id': str(movie_id),
+                'type': media_type
+            }
+        )
+        return notification
+    except Exception as exc:
+        logger.exception('Failed to create/send notification for user %s: %s', getattr(user, 'id', None), exc)
+        return None

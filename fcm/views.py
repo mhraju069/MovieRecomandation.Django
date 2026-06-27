@@ -70,9 +70,17 @@ from .utils import send_fcm_to_user
 
 User = get_user_model()
 
+from drf_yasg.utils import swagger_auto_schema
+
 class SendCustomNotificationView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
+    @swagger_auto_schema(
+        request_body=SendCustomNotificationSerializer,
+        responses={200: "Success Response"},
+        operation_summary="Send custom notification",
+        operation_description="Send custom notification to user",
+    )
     def post(self, request):
         serializer = SendCustomNotificationSerializer(data=request.data)
         if not serializer.is_valid():

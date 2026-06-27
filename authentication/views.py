@@ -165,6 +165,22 @@ class AddFollowerView(APIView):
             else:
                 return Response({"status": False, "log": "Follow request already sent"}, status=400)
 
+        # Send follow request notification
+        try:
+            from fcm.utils import create_and_send_notification
+            follower_name = user.name or user.email.split('@')[0].title()
+            title = "New Follow Request"
+            message = f"{follower_name} sent you a follow request."
+            create_and_send_notification(
+                user=target_user,
+                title=title,
+                message=message,
+                movie_id=None,
+                media_type='movie'
+            )
+        except Exception as ne:
+            print(f"Error sending follow request notification: {ne}")
+
         return Response({"status": True, "log": "Follow request sent successfully"}, status=200)
 
 
@@ -225,9 +241,26 @@ class ConfirmFollowRequestView(APIView):
             follow_req = Follows.objects.get(follower_id=follower_user_id, following=user)
             if follow_req.status:
                 return Response({"status": False, "log": "Follow request already accepted"}, status=400)
-                
+
             follow_req.status = True
             follow_req.save()
+
+            # Send follow acceptance notification
+            try:
+                from fcm.utils import create_and_send_notification
+                accepter_name = user.name or user.email.split('@')[0].title()
+                title = "Follow Request Accepted"
+                message = f"{accepter_name} accepted your follow request."
+                create_and_send_notification(
+                    user=follow_req.follower,
+                    title=title,
+                    message=message,
+                    movie_id=None,
+                    media_type='movie'
+                )
+            except Exception as ne:
+                print(f"Error sending follow acceptance notification: {ne}")
+
             return Response({"status": True, "log": "Follow request accepted"}, status=200)
         except Follows.DoesNotExist:
             return Response({"status": False, "log": "Follow request not found"}, status=404)
