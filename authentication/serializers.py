@@ -55,16 +55,18 @@ class UserProfileSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = User
-        exclude = ['last_login','bio','block','role','is_active', 'is_staff', 'is_superuser', 'groups', 'user_permissions', 'created_at']
+        exclude = ['last_login','block','role','is_active', 'is_staff', 'is_superuser', 'groups', 'user_permissions', 'created_at']
         read_only_fields = ['id', 'email']
         extra_kwargs = {
             'password': {'write_only': True, 'required': False}
         }
 
     def update(self, instance, validated_data):
-        # Update name and image if provided
+        # Update name, image, bio, and notify if provided
         instance.name = validated_data.get('name', instance.name)
         instance.image = validated_data.get('image', instance.image)
+        instance.bio = validated_data.get('bio', instance.bio)
+        instance.notify = validated_data.get('notify', instance.notify)
 
         # Handle password update
         old_password = validated_data.get('old_password')
