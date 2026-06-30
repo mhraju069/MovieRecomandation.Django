@@ -1,7 +1,7 @@
 from django.db import models
 from django.contrib.auth.models import BaseUserManager, AbstractBaseUser, PermissionsMixin
 from django.conf import settings
-import random,uuid
+import random,uuid,re
 from datetime import timedelta
 from django.utils import timezone
 
@@ -38,6 +38,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     ROLE = (('user', 'User'),('admin', 'Admin'),)
     
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    username = models.CharField(max_length=150, unique=True, null=True, blank=True, verbose_name="Username")
     email = models.EmailField(max_length=255,unique=True,verbose_name="User Email")
     name = models.CharField(max_length=200, blank=True, null=True,verbose_name="User Name")
     bio = models.TextField(blank=True, null=True,verbose_name="Bio")
@@ -69,6 +70,17 @@ class User(AbstractBaseUser, PermissionsMixin):
 
         if self.is_staff and self.is_superuser:
             self.role = 'admin'
+        
+        if not self.username:
+            base_username = re.sub(r'[^a-zA-Z0-9]', '', self.email.split("@")[0]).lower()
+            username = base_username
+            counter = 1
+
+            while User.objects.filter(username=username).exists():
+                username = f"{base_username}{counter}"
+                counter += 1
+
+            self.username = username
 
         super().save(*args, **kwargs)
 

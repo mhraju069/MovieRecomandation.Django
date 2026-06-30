@@ -55,7 +55,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = User
-        exclude = ['last_login','block','role','is_active', 'is_staff', 'is_superuser', 'groups', 'user_permissions', 'created_at']
+        exclude = ['last_login', 'block', 'role', 'is_active', 'is_staff', 'is_superuser', 'groups', 'user_permissions', 'created_at']
         read_only_fields = ['id', 'email']
         extra_kwargs = {
             'password': {'write_only': True, 'required': False}
@@ -71,13 +71,21 @@ class UserProfileSerializer(serializers.ModelSerializer):
         # Handle password update
         old_password = validated_data.get('old_password')
         new_password = validated_data.get('password')
+        username = validated_data.get('username')
+
+        if username:
+            # Check if username exists and is not the current user
+            existing_username = User.objects.filter(username=username).exclude(id=instance.id).first()
+            if existing_username:
+                raise serializers.ValidationError({"error": "Username already exists."})
+            instance.username = username
 
         if new_password:
             if not old_password:
-                raise serializers.ValidationError({"old_password": "Current password is required to set a new password."})
+                raise serializers.ValidationError({"error": "Current password is required to set a new password."})
             
             if not instance.check_password(old_password):
-                raise serializers.ValidationError({"old_password": "Old password does not match."})
+                raise serializers.ValidationError({"error": "Old password does not match."})
             
             instance.set_password(new_password)
 
