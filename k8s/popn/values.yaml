@@ -161,3 +161,21 @@ nodeSelector: {}
 tolerations: []
 
 affinity: {}
+
+# Environment variables to populate K8s Secret and inject into deployment
+env:
+  SECRET_KEY: ""
+  DEBUG: "False"
+  ALLOWED_HOSTS: "*"
+  USE_PSQL: "True"
+  DB_NAME: ""
+  DB_USER: ""
+  DB_PASSWORD: ""
+  DB_HOST: "db"
+  DB_PORT: "5432"
+  CORS_ALLOW_ORIGINS: "http://localhost:8000,http://localhost:3000,http://k8s.popnpicks.com,https://api.popnpicks.com"
+  CSRF_TRUSTED_ORIGINS: "http://localhost:8000,http://localhost:3000,http://k8s.popnpicks.com,https://api.popnpicks.com"
+  EMAIL_HOST_USER: ""
+  EMAIL_HOST_PASSWORD: ""
+  DEFAULT_FROM_EMAIL: ""
+  TMDB_ACCESS_TOKEN: ""

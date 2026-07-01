@@ -27,3 +27,4 @@ python-dotenv
 PyJWT
 cryptography
 drf-yasg
+whitenoise
