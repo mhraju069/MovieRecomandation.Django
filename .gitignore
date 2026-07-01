@@ -52,3 +52,6 @@ coverage.xml
 .DS_Store
 Thumbs.db
 celerybeat-schedule
+
+# k8s values
+k8s/popn/values.yaml

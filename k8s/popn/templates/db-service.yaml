@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "popn.fullname" . }}-db
+  name: {{ .Values.env.DB_HOST }}
   labels:
     {{- include "popn.labels" . | nindent 4 }}
 spec:
