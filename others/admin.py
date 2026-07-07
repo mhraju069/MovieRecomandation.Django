@@ -4,7 +4,7 @@ from unfold.admin import ModelAdmin
 
 
 
-admin.site.register(FAQ,ModelAdmin)
+# admin.site.register(FAQ,ModelAdmin)
 admin.site.register(Support,ModelAdmin)
 
 
@@ -17,11 +17,11 @@ class InlineTermsAndConditionsContent(admin.StackedInline):
     extra = 0
 
 
-@admin.register(PrivacyPolicy)
-class PrivacyPolicyAdmin(ModelAdmin):
-    inlines = [InlinePrivacyPolicyContent]
+# @admin.register(PrivacyPolicy)
+# class PrivacyPolicyAdmin(ModelAdmin):
+#     inlines = [InlinePrivacyPolicyContent]
 
 
-@admin.register(TermsAndConditions)
-class TermsAndConditionsAdmin(ModelAdmin):
-    inlines = [InlineTermsAndConditionsContent]
+# @admin.register(TermsAndConditions)
+# class TermsAndConditionsAdmin(ModelAdmin):
+#     inlines = [InlineTermsAndConditionsContent]
