@@ -51,3 +51,13 @@ class TermsAndConditionsView(generics.RetrieveAPIView):
             raise NotFound("Terms and conditions not found.")
         return obj
 
+
+
+class ReportsListCreateView(generics.ListCreateAPIView):
+    permission_classes = [permissions.IsAuthenticated]
+    serializer_class = ReportsSerializer
+
+    def get_queryset(self):
+        return Reports.objects.filter(user=self.request.user)
+
+

@@ -1,6 +1,7 @@
 from django.db import models
 import uuid
 from django.conf import settings
+from tmdb.models import FeedPost, FeedPostComment, ReviewAndRating, RatingComment
 
 
 class FAQ(models.Model):
@@ -74,3 +75,22 @@ class TermsAndConditionsContent(models.Model):
     
 
 
+
+class Reports(models.Model):
+    TYPE = (
+        ('USER','User'),('POST_COMMENT','Post Comment'),('RATING_COMMENT','Rating Comment'),('POST','Post'),('REVIEW','Review')
+    )
+    type = models.CharField(max_length=200, choices=TYPE, verbose_name="Type")
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='reports')
+    reported_user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, null=True, blank=True, related_name='reported_user_reports')
+    reported_post = models.ForeignKey(FeedPost, on_delete=models.CASCADE, null=True, blank=True, related_name='reported_post_reports')
+    reported_review = models.ForeignKey(ReviewAndRating, on_delete=models.CASCADE, null=True, blank=True, related_name='reported_review_reports')
+    reported_feed_post_comment = models.ForeignKey(FeedPostComment, on_delete=models.CASCADE, null=True, blank=True, related_name='reported_feed_post_comment_reports')
+    reported_rating_comment = models.ForeignKey(RatingComment, on_delete=models.CASCADE, null=True, blank=True, related_name='reported_comment_reports')
+
+    is_solved = models.BooleanField(default=False,verbose_name="Is Solved")
+    remark = models.TextField(null=True, blank=True, verbose_name="Remark")
+    reported_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.user} reported a {self.type}"

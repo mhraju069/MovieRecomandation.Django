@@ -49,3 +49,52 @@ class TermsAndConditionsSerializer(serializers.ModelSerializer):
         read_only_fields = ['effective_date','updated_at']
 
 
+
+class ReportsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Reports
+        fields = [
+            'id', 
+            'type', 
+            'user',
+            'reported_user', 
+            'reported_post', 
+            'reported_review', 
+            'reported_feed_post_comment', 
+            'reported_rating_comment', 
+            'is_solved', 
+            'remark', 
+            'reported_at'
+        ]
+        read_only_fields = ['id', 'user', 'is_solved', 'remark', 'reported_at']
+
+    def validate(self, attrs):
+        report_type = attrs.get('type')
+        
+        type_field_map = {
+            'USER': 'reported_user',
+            'POST': 'reported_post',
+            'REVIEW': 'reported_review',
+            'POST_COMMENT': 'reported_feed_post_comment',
+            'RATING_COMMENT': 'reported_rating_comment',
+        }
+        
+        target_field = type_field_map.get(report_type)
+        if not target_field:
+            raise serializers.ValidationError({"type": "Invalid report type."})
+            
+        if not attrs.get(target_field):
+            raise serializers.ValidationError({target_field: f"This field is required when report type is {report_type}."})
+            
+        for key, field_name in type_field_map.items():
+            if field_name != target_field and attrs.get(field_name):
+                attrs[field_name] = None
+                
+        return attrs
+
+    def create(self, validated_data):
+        validated_data['user'] = self.context['request'].user
+        return super().create(validated_data)
+
+
+
