@@ -18,4 +18,7 @@ urlpatterns = [
     path('friend-suggestions/', FriendSuggestionsView.as_view(), name='friend_suggestions'),
     path('followers/pending/', GetFollowersPendingView.as_view(), name='get_followers_pending'),
     path('followers/confirm/<uuid:user_id>/', ConfirmFollowRequestView.as_view(), name='confirm_follow_request'),
+    path('block/add/<uuid:user_id>/', BlockUserView.as_view(), name='block_user'),
+    path('block/remove/<uuid:user_id>/', UnblockUserView.as_view(), name='unblock_user'),
+    path('blocked/', BlockedUsersListView.as_view(), name='blocked_list'),
 ]

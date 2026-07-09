@@ -1,4 +1,4 @@
-from .models import User
+from .models import User, Blocks
 from rest_framework import serializers
 from .helper import verify_otp,send_otp
 
@@ -139,6 +139,16 @@ class ResetPasswordSerializer(serializers.Serializer):
         user.set_password(new_password)
         user.save()
         return {"status": True, "log": "Password reset successfully"}
+
+
+class BlocksSerializer(serializers.ModelSerializer):
+    blocked_user_details = UserProfileSerializer(source='blocked', read_only=True)
+
+    class Meta:
+        model = Blocks
+        fields = ['id', 'blocked', 'blocked_user_details', 'created_at']
+        read_only_fields = ['id', 'created_at']
+
 
 
 

@@ -961,7 +961,9 @@ def get_feed_posts_by_prefrences(request):
             preferred_tags.update([str(g.get("name")).lower() for g in preferences.genre if g.get("name")])
             
         # Get recent feed posts
-        recent_posts = FeedPost.objects.select_related('user', 'review').order_by('-created_at')[:200]
+        from authentication.utils import get_blocked_user_ids
+        blocked_ids = get_blocked_user_ids(user)
+        recent_posts = FeedPost.objects.select_related('user', 'review').exclude(user_id__in=blocked_ids).order_by('-created_at')[:200]
         
         matched_posts = []
         for post in recent_posts:

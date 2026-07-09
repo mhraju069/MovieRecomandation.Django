@@ -13,10 +13,11 @@ def get_friends_by_preferences(user):
     if not my_genres and not my_platforms:
         return []
 
-    # Exclude current user, people they already follow, and people who follow them
+    # Exclude current user, people they already follow, people who follow them, and blocked/blocking users
     following_ids = set(user.following.values_list('following_id', flat=True))
     follower_ids = set(user.followers.values_list('follower_id', flat=True))
-    excluded_ids = following_ids.union(follower_ids)
+    blocked_ids = get_blocked_user_ids(user)
+    excluded_ids = following_ids.union(follower_ids).union(blocked_ids)
         
     other_prefs = UserPrefrences.objects.exclude(user=user).select_related('user')
     suggestions = []
@@ -36,3 +37,12 @@ def get_friends_by_preferences(user):
             
     suggestions.sort(key=lambda x: x[0], reverse=True)
     return [u for score, u in suggestions]
+
+
+def get_blocked_user_ids(user):
+    if not user or not user.is_authenticated:
+        return set()
+    from authentication.models import Blocks
+    blocked_by_user = set(Blocks.objects.filter(blocker=user).values_list('blocked_id', flat=True))
+    users_who_blocked = set(Blocks.objects.filter(blocked=user).values_list('blocker_id', flat=True))
+    return blocked_by_user.union(users_who_blocked)

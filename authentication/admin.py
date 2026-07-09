@@ -5,3 +5,4 @@ from unfold.admin import ModelAdmin
 
 admin.site.register(User, ModelAdmin)
 admin.site.register(Follows, ModelAdmin)
+admin.site.register(Blocks, ModelAdmin)

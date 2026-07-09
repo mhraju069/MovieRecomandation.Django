@@ -566,11 +566,13 @@ class MovieDetailView(views.APIView):
     def GetRating(self, request, movie_id, media_type='movie'):
         try:
             from authentication.models import Follows
+            from authentication.utils import get_blocked_user_ids
             user = request.user
             friend_ids = set(Follows.objects.filter(follower=user, status=True).values_list('following_id', flat=True)) | \
                          set(Follows.objects.filter(following=user, status=True).values_list('follower_id', flat=True))
 
-            reviews = ReviewAndRating.objects.filter(movie_id=movie_id, type=media_type).exclude(rating__isnull=True).order_by('-created_at')
+            blocked_ids = get_blocked_user_ids(user)
+            reviews = ReviewAndRating.objects.filter(movie_id=movie_id, type=media_type).exclude(rating__isnull=True).exclude(user_id__in=blocked_ids).order_by('-created_at')
             
             friend_reviews = []
             other_reviews = []
@@ -1058,7 +1060,9 @@ class GetCommentsApiView(generics.ListAPIView):
 
     def get_queryset(self):
         post_id = self.kwargs.get("post_id")
-        return FeedPostComment.objects.filter(post_id=post_id).select_related('user').order_by('created_at')
+        from authentication.utils import get_blocked_user_ids
+        blocked_ids = get_blocked_user_ids(self.request.user)
+        return FeedPostComment.objects.filter(post_id=post_id).exclude(user_id__in=blocked_ids).select_related('user').order_by('created_at')
 
     def list(self, request, *args, **kwargs):
         try:
@@ -1104,7 +1108,9 @@ class GetReviewCommentsApiView(generics.GenericAPIView):
 
     def get(self, request,review_id):
         try:
-            comments = RatingComment.objects.filter(rating__id=review_id).select_related('user').order_by('created_at')
+            from authentication.utils import get_blocked_user_ids
+            blocked_ids = get_blocked_user_ids(request.user)
+            comments = RatingComment.objects.filter(rating__id=review_id).exclude(user_id__in=blocked_ids).select_related('user').order_by('created_at')
             response = [
                 {
                     'id': comment.id,

@@ -155,6 +155,11 @@ class AddFollowerView(APIView):
         except User.DoesNotExist:
             return Response({"status": False, "log": "User not found"}, status=404)
 
+        if Blocks.objects.filter(blocker=user, blocked=target_user).exists():
+            return Response({"status": False, "log": "You have blocked this user"}, status=400)
+        if Blocks.objects.filter(blocker=target_user, blocked=user).exists():
+            return Response({"status": False, "log": "This user has blocked you"}, status=400)
+
         follow_req, created = Follows.objects.get_or_create(
             follower=user,
             following=target_user
@@ -299,7 +304,8 @@ class FriendSuggestionsView(APIView):
         if not suggested_users:
             following_ids = set(user.following.values_list('following_id', flat=True))
             follower_ids = set(user.followers.values_list('follower_id', flat=True))
-            excluded_ids = following_ids.union(follower_ids)
+            blocked_ids = get_blocked_user_ids(user)
+            excluded_ids = following_ids.union(follower_ids).union(blocked_ids)
             suggested_users = [u for u in User.objects.all() if u != user and u.id not in excluded_ids][:20]
 
         suggestions = [UserProfileSerializer(u,context={"request":request}).data for u in suggested_users]
@@ -362,3 +368,62 @@ class FirebaseLoginView(APIView):
             }, status=status.HTTP_200_OK)
         else:
             return Response({'status': False,'log': 'Invalid or expired token'}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class BlockUserView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, user_id):
+        user = request.user
+
+        if str(user.id) == str(user_id):
+            return Response({"status": False, "log": "You cannot block yourself"}, status=400)
+
+        try:
+            target_user = User.objects.get(id=user_id)
+        except User.DoesNotExist:
+            return Response({"status": False, "log": "User not found"}, status=404)
+
+        block_rel, created = Blocks.objects.get_or_create(
+            blocker=user,
+            blocked=target_user
+        )
+
+        if not created:
+            return Response({"status": False, "log": "You have already blocked this user"}, status=400)
+
+        # Delete any existing follows between them in either direction
+        from django.db.models import Q
+        Follows.objects.filter(
+            Q(follower=user, following=target_user) |
+            Q(follower=target_user, following=user)
+        ).delete()
+
+        return Response({"status": True, "log": "User blocked successfully"}, status=200)
+
+
+class UnblockUserView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, user_id):
+        user = request.user
+
+        try:
+            target_user = User.objects.get(id=user_id)
+        except User.DoesNotExist:
+            return Response({"status": False, "log": "User not found"}, status=404)
+
+        block_rel = Blocks.objects.filter(blocker=user, blocked=target_user).first()
+        if not block_rel:
+            return Response({"status": False, "log": "You have not blocked this user"}, status=400)
+
+        block_rel.delete()
+        return Response({"status": True, "log": "User unblocked successfully"}, status=200)
+
+
+class BlockedUsersListView(generics.ListAPIView):
+    permission_classes = [permissions.IsAuthenticated]
+    serializer_class = BlocksSerializer
+
+    def get_queryset(self):
+        return Blocks.objects.filter(blocker=self.request.user)
