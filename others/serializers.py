@@ -62,11 +62,13 @@ class ReportsSerializer(serializers.ModelSerializer):
             'reported_review', 
             'reported_feed_post_comment', 
             'reported_rating_comment', 
-            'is_solved', 
+            'reason',
+            'is_resolved', 
             'remark', 
-            'reported_at'
+            'reported_at',
+            'resolved_at'
         ]
-        read_only_fields = ['id', 'user', 'is_solved', 'remark', 'reported_at']
+        read_only_fields = ['id', 'user', 'is_resolved', 'remark', 'reported_at', 'resolved_at']
 
     def validate(self, attrs):
         report_type = attrs.get('type')

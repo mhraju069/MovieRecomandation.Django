@@ -1,6 +1,7 @@
 from django.db import models
 import uuid
 from django.conf import settings
+from django.utils import timezone
 from tmdb.models import FeedPost, FeedPostComment, ReviewAndRating, RatingComment
 
 
@@ -88,9 +89,16 @@ class Reports(models.Model):
     reported_feed_post_comment = models.ForeignKey(FeedPostComment, on_delete=models.CASCADE, null=True, blank=True, related_name='reported_feed_post_comment_reports')
     reported_rating_comment = models.ForeignKey(RatingComment, on_delete=models.CASCADE, null=True, blank=True, related_name='reported_comment_reports')
 
-    is_solved = models.BooleanField(default=False,verbose_name="Is Solved")
+    reason = models.CharField(max_length=255, null=True, blank=True, verbose_name="Reason")
     remark = models.TextField(null=True, blank=True, verbose_name="Remark")
+    is_resolved = models.BooleanField(default=False,verbose_name="Is Resolved")
     reported_at = models.DateTimeField(auto_now_add=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+
+    def save(self, *args, **kwargs):
+        if self.is_resolved and not self.resolved_at:
+            self.resolved_at = timezone.now()
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.user} reported a {self.type}"
