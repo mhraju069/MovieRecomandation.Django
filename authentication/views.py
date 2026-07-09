@@ -427,3 +427,20 @@ class BlockedUsersListView(generics.ListAPIView):
 
     def get_queryset(self):
         return Blocks.objects.filter(blocker=self.request.user)
+
+
+class DeleteAccountView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        user = request.user
+        password = request.data.get('password')
+
+        if not password:
+            return Response({"status": False, "log": "Password is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not user.check_password(password):
+            return Response({"status": False, "log": "Incorrect password"}, status=status.HTTP_400_BAD_REQUEST)
+
+        user.delete()
+        return Response({"status": True, "log": "Account deleted successfully"}, status=status.HTTP_200_OK)

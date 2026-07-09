@@ -21,4 +21,5 @@ urlpatterns = [
     path('block/add/<uuid:user_id>/', BlockUserView.as_view(), name='block_user'),
     path('block/remove/<uuid:user_id>/', UnblockUserView.as_view(), name='unblock_user'),
     path('blocked/', BlockedUsersListView.as_view(), name='blocked_list'),
+    path('delete-account/', DeleteAccountView.as_view(), name='delete_account'),
 ]
