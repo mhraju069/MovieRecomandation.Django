@@ -2,6 +2,8 @@ from django.utils import timezone
 from .models import OTP, User
 from django.core.mail import send_mail
 from django.conf import settings
+from django.template.loader import render_to_string
+from django.utils.html import strip_tags
 
 def send_otp(email, task="verification"):
     try:
@@ -9,11 +11,18 @@ def send_otp(email, task="verification"):
         otp_obj = OTP.generate_otp(user)
         
         subject = f"Your OTP for {task}"
-        message = f"Your OTP code is {otp_obj.otp}. It will expire in 3 minutes."
+        html_message = render_to_string('otp_email.html', {'otp': otp_obj.otp})
+        plain_message = strip_tags(html_message)
         email_from = settings.EMAIL_HOST_USER
         recipient_list = [email]
         
-        send_mail(subject, message, email_from, recipient_list)
+        send_mail(
+            subject=subject,
+            message=plain_message,
+            from_email=email_from,
+            recipient_list=recipient_list,
+            html_message=html_message
+        )
         
         return {"status": True, "log": f"OTP sent successfully to {email}"}
     except User.DoesNotExist:
