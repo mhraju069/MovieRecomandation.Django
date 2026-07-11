@@ -70,6 +70,7 @@ class UserRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
 
 class GetOtpView(generics.GenericAPIView):
     permission_classes = [permissions.AllowAny]
+    authentication_classes = []
     serializer_class = GetOtpSerializer
 
     def post(self, request):
