@@ -105,7 +105,7 @@ class OTP(models.Model):
 
     @staticmethod
     def generate_otp(user):
-        otp_code = str(random.randint(100000, 999999))
+        otp_code = str(random.randint(1000, 9999))
         return OTP.objects.create(user=user, otp=otp_code)
 
     def is_expired(self):
